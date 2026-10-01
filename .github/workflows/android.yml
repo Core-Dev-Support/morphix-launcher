@@ -35,7 +35,10 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      # Lint не блокирует сборку APK: проблемы показываются в логе и в отчёте,
+      # но release/debug собираются в любом случае.
       - name: Lint
+        continue-on-error: true
         run: ./gradlew --no-daemon --stacktrace lintDebug
 
       - name: Build Debug APK

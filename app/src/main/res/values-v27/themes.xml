@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- API 27+: разделитель навигационной панели тоже делаем прозрачным -->
+    <!-- API 27+: разделитель и светлые элементы навигационной панели -->
     <style name="Theme.Morphix.Transparent" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:navigationBarDividerColor">@android:color/transparent</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>
