@@ -1,7 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Подписка намеренно узкая. Без android:eventTypes система считает
+    подписку typeAllMask и доставляет лаунчеру каждое событие доступности
+    из каждого приложения, хотя onAccessibilityEvent ничего не делает —
+    это постоянные пробуждения CPU и расход батареи в фоне.
+    canPerformGestures не нужен: служба не выполняет жесты.
+-->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/accessibility_service_description"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault"
-    android:canPerformGestures="true"
-    android:canRetrieveWindowContent="false" />
+    android:canPerformGestures="false"
+    android:canRetrieveWindowContent="false"
+    android:eventTypes="typeWindowStateChanged"
+    android:notificationTimeout="60000" />

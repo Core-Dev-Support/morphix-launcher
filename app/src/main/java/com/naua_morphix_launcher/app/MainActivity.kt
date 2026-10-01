@@ -2,6 +2,7 @@
 package com.naua_morphix_launcher.app
 
 import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.app.Dialog
 import android.app.PendingIntent
 import android.app.admin.DevicePolicyManager
@@ -74,6 +75,7 @@ import com.naua_morphix_launcher.app.ui.AppsAdapter
 import com.naua_morphix_launcher.app.ui.DesktopPagerAdapter
 import com.naua_morphix_launcher.app.ui.WidgetsAdapter
 import com.naua_morphix_launcher.app.ui.SettingsDialog
+import com.naua_morphix_launcher.app.views.LiquidGlassView
 import com.naua_morphix_launcher.app.util.AppLoader
 import com.naua_morphix_launcher.app.util.PreferencesManager
 
@@ -118,6 +120,7 @@ class MainActivity : AppCompatActivity() {
     private var tapCounter = 0
     private var lastTapTime = 0L
     private var isBlurInitialized = false
+    private var lowEndDeviceCache: Boolean? = null
 
     private val APPWIDGET_HOST_ID = 1024
     private val REQUEST_PICK_APPWIDGET = 2001
@@ -163,8 +166,24 @@ class MainActivity : AppCompatActivity() {
     private val packageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             cachedWidgetGroups = null
-            loadInstalledApps()
+            // сбрасываем кэш иконок именно этого пакета, иначе иконка
+            // обновлённого приложения оставалась старой до перезапуска процесса
+            intent?.data?.schemeSpecificPart?.let { AppLoader.invalidatePackage(it) }
+            scheduleAppReload()
         }
+    }
+
+    // loadApps делает кросс-процессные вызовы в system_server (label + иконка
+    // каждого приложения). Без дебаунса пачка установок давала серию полных
+    // перезагрузок по 1-3 секунды каждая.
+    private val appReloadHandler = Handler(Looper.getMainLooper())
+    private val appReloadRunnable = Runnable { loadInstalledApps() }
+    private var appReloadScheduled = false
+
+    private fun scheduleAppReload() {
+        if (appReloadScheduled) return
+        appReloadScheduled = true
+        appReloadHandler.postDelayed(appReloadRunnable, 400)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -262,12 +281,29 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        // без снятия отложенной перезагрузки Handler мог сработать на мёртвой Activity
+        appReloadHandler.removeCallbacks(appReloadRunnable)
+        appReloadScheduled = false
         try {
             unregisterReceiver(packageReceiver)
         } catch (e: Exception) {
             e.printStackTrace()
         }
+        // кэш host-view виджетов переживал Activity и удерживал целое дерево RemoteViews
+        widgetViewCache.keys.toList().forEach { id ->
+            try {
+                appWidgetManager.getAppWidgetInfo(id)?.let { appWidgetHost.destroyView(id) }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+        widgetViewCache.clear()
+        try {
+            appWidgetHost.stopListening()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        super.onDestroy()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -358,7 +394,34 @@ class MainActivity : AppCompatActivity() {
         updateHomeScreenApps()
     }
 
+    /**
+     * Определение слабого устройства. Нужно, чтобы не рисовать 6 градиентных
+ * слоёв на каждой из ~60 стеклянных вьюх сетки и не держать 5 страниц
+ * ViewPager в памяти.
+ */
+private fun isLowEndDevice(): Boolean {
+        if (lowEndDeviceCache != null) return lowEndDeviceCache!!
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memClass = am.memoryClass
+        val cores = Runtime.getRuntime().availableProcessors()
+        val isLow = memClass <= 128 || cores <= 2
+        lowEndDeviceCache = isLow
+        return isLow
+    }
+
+    private fun applyGlassQuality() {
+        val quality = if (isLowEndDevice()) {
+            LiquidGlassView.REDUCED_QUALITY
+        } else {
+            LiquidGlassView.FULL_QUALITY
+        }
+        binding.glassAppDrawer.setQuality(quality)
+        binding.folderFullscreenOverlay.glassFolderCard.setQuality(quality)
+    }
+
     private fun setupGlassmorphism() {
+        applyGlassQuality()
+
         if (currentSettings.isGlassEnabled) {
             if (!isBlurInitialized) {
                 binding.glassAppDrawer.setupWithActivityRoot()
@@ -367,10 +430,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             binding.glassAppDrawer.setGlassEnabled(true)
-            binding.glassAppDrawer.setRadius(currentSettings.blurRadius)
-
             binding.folderFullscreenOverlay.glassFolderCard.setGlassEnabled(true)
-            binding.folderFullscreenOverlay.glassFolderCard.setRadius(currentSettings.blurRadius)
         } else {
             if (isBlurInitialized) {
                 binding.glassAppDrawer.setGlassEnabled(false)
@@ -476,7 +536,10 @@ class MainActivity : AppCompatActivity() {
         )
 
         binding.homeViewPager.adapter = desktopPagerAdapter
-        binding.homeViewPager.offscreenPageLimit = 3
+        // На слабых устройствах 5 удерживаемых страниц (~300 ячеек) — это
+        // лишняя память и лишние layout-проходы; 2 страницы хватает для
+        // плавного свайпа (текущая + соседняя + запас).
+        binding.homeViewPager.offscreenPageLimit = if (isLowEndDevice()) 1 else 3
 
         // Dock adapter removed
 
@@ -485,7 +548,9 @@ class MainActivity : AppCompatActivity() {
         vpRecyclerView?.apply {
             isNestedScrollingEnabled = false
             setHasFixedSize(true)
-            setItemViewCacheSize(8)
+            // offscreenPageLimit = 3 держит до 5 страниц; на 4 ГБ это ~300
+            // ячеек в памяти одновременно, поэтому кэш держим скромным
+            setItemViewCacheSize(4)
             itemAnimator = null
             overScrollMode = View.OVER_SCROLL_NEVER
 
@@ -4449,6 +4514,12 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
         }
 
         binding.appsRecyclerView.layoutManager = GridLayoutManager(this, columns)
+        // Без этого каждый бейдж уведомления запускал DefaultItemAnimator
+        // с кросс-фейдом и рендером ячейки в offscreen-слой — прямой источник
+        // jank на слабом GPU
+        binding.appsRecyclerView.itemAnimator = null
+        binding.appsRecyclerView.setHasFixedSize(true)
+        binding.appsRecyclerView.setItemViewCacheSize(8)
 
         drawerAppsAdapter = AppsAdapter(
             onAppClick = { item ->
@@ -4625,9 +4696,13 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     }
 
     private fun filterApps(query: String) {
+        // читаем prefs один раз, а не на каждый элемент в предикате:
+        // filterApps зовётся на каждый символ поиска по 100-300 приложениям
+        val hidden = currentSettings.hiddenPackages
+        val secondSpacePkgs = prefsManager.getSecondSpacePackages()
         val spaceFiltered = allApps.filter {
-            !currentSettings.hiddenPackages.contains(it.packageName) &&
-            (it.isSecondSpace == isSecondSpaceActive || (isSecondSpaceActive && prefsManager.getSecondSpacePackages().contains(it.packageName)))
+            it.packageName !in hidden &&
+            (it.isSecondSpace == isSecondSpaceActive || (isSecondSpaceActive && it.packageName in secondSpacePkgs))
         }
 
         if (query.isEmpty()) {
@@ -4748,9 +4823,15 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
         dialog.show()
     }
 
+    private var appLoadJob: kotlinx.coroutines.Job? = null
+
     private fun loadInstalledApps() {
-        lifecycleScope.launch {
-            allApps = AppLoader.loadApps(this@MainActivity)
+        // предыдущая загрузка ещё шла (1-3 секунды IPC) — отменяем её,
+        // иначе результаты приходят в обратном порядке и список «дёргается»
+        appLoadJob?.cancel()
+        appReloadScheduled = false
+        appLoadJob = lifecycleScope.launch {
+            allApps = AppLoader.loadApps(applicationContext)
             autoSeedSecondSpaceIfNeeded()
 
             // Проверяем наличие приложений Второго пространства

@@ -1,4 +1,4 @@
-package com.naua_morphix_launcher.app.ui
+﻿package com.naua_morphix_launcher.app.ui
 
 import android.graphics.Canvas
 import android.view.LayoutInflater
@@ -56,6 +56,12 @@ class DesktopPagerAdapter(
     fun setDraggedItemPackage(pkg: String?) {
         for (holder in activeHolders) {
             holder.pageAdapter.draggedItemPackage = pkg
+        }
+    }
+
+    fun setDraggedItemKey(key: String?) {
+        for (holder in activeHolders) {
+            holder.pageAdapter.draggedItemKey = key
         }
     }
 
@@ -146,6 +152,7 @@ class DesktopPagerAdapter(
     override fun onViewAttachedToWindow(holder: PageViewHolder) {
         super.onViewAttachedToWindow(holder)
         activeHolders.add(holder)
+        // setEditMode сам проверяет равенство и не шлёт notify при повторе
         holder.pageAdapter.setEditMode(isEditMode, selectedApps)
     }
 
@@ -197,18 +204,17 @@ class DesktopPagerAdapter(
             }
             gridLayout.spanSizeLookup = object : GridLayoutManager.SpanSizeLookup() {
                 override fun getSpanSize(position: Int): Int {
-                    val items = pageAdapter.getItems()
-                    if (position in items.indices) {
-                        val item = items[position]
-                        if (item.isWidget) {
-                            return spanCount
-                        }
-                        if (item.isFolder) {
-                            when (item.folderSize) {
-                                "ENLARGED" -> return 2.coerceAtMost(spanCount)
-                                "XXL" -> return spanCount
-                                else -> return 1
-                            }
+                    // getItemOrNull вместо getItems(): этот метод зовётся N раз за
+                    // каждый layout-проход, а getItems() копировал весь массив
+                    val item = pageAdapter.getItemOrNull(position) ?: return 1
+                    if (item.isWidget) {
+                        return spanCount
+                    }
+                    if (item.isFolder) {
+                        when (item.folderSize) {
+                            "ENLARGED" -> return 2.coerceAtMost(spanCount)
+                            "XXL" -> return spanCount
+                            else -> return 1
                         }
                     }
                     return 1
@@ -217,7 +223,10 @@ class DesktopPagerAdapter(
             binding.pageRecyclerView.layoutManager = gridLayout
             binding.pageRecyclerView.adapter = pageAdapter
             binding.pageRecyclerView.setHasFixedSize(true)
-            binding.pageRecyclerView.setItemViewCacheSize(24)
+            // offscreenPageLimit = 3 держит до 5 страниц по ~60 ячеек; кэш в 24
+            // дополнительно держал разметку соседних экранов. На 4 ГБ это
+            // лишняя память и лишние layout-проходы без видимой пользы.
+            binding.pageRecyclerView.setItemViewCacheSize(6)
             binding.pageRecyclerView.itemAnimator = null // Устраняет микрофризы при свайпе
             binding.pageRecyclerView.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
                 applyCellHeight()

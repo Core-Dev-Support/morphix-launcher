@@ -15,7 +15,11 @@ import com.naua_morphix_launcher.app.R
 import android.os.Handler
 import android.os.Looper
 import java.util.Collections
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AppsAdapter(
     private val onAppClick: (AppItem) -> Unit,
@@ -28,6 +32,20 @@ class AppsAdapter(
     private val onSelectToggle: ((AppItem) -> Unit)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
+    companion object {
+        const val PAYLOAD_EDIT_MODE = "EDIT_MODE"
+        const val PAYLOAD_DRAG_STATE = "DRAG_STATE"
+        const val PAYLOAD_BADGE = "BADGE"
+        const val PAYLOAD_CONFIG = "CONFIG"
+
+        /** Один Handler на адаптер. Раньше создавался новый Handler на каждый bind. */
+        private val TOUCH_HANDLER = Handler(Looper.getMainLooper())
+
+        /** ShapeAppearanceModel кэшируется: 4 значения enum, а пересборка формы
+         *  заставляла Material пересоздавать маску Path при отрисовке. */
+        private val shapeModelCache = java.util.concurrent.ConcurrentHashMap<IconShape, ShapeAppearanceModel>()
+    }
+
     private val items = ArrayList<AppItem>()
     private var iconShape: IconShape = IconShape.SQUIRCLE
     private var showLabels: Boolean = true
@@ -36,38 +54,54 @@ class AppsAdapter(
     private var badgeCounts: Map<String, Int> = emptyMap()
         private set
         
-    var draggedItemPackage: String? = null
+    /**
+     * Стабильный ключ элемента. packageName недостаточно: один и тот же пакет
+     * существует в двух экземплярах (основное пространство и клон второго),
+     * и по packageName DiffUtil считал их одним элементом, а поиск при drag
+     * всегда попадал в первое совпадение — то есть в иконку не того профиля.
+     */
+    private fun identityOf(item: AppItem): String = when {
+        item.isEmpty -> ""
+        item.isFolder -> "f:${item.folderId}"
+        item.isWidget -> "w:${item.widgetId}"
+        else -> "a:${item.packageName}:${item.userHandle?.hashCode() ?: 0}"
+    }
+
+    var draggedItemKey: String? = null
         set(value) {
             if (field != value) {
-                val oldPackage = field
+                val oldKey = field
                 field = value
-                
-                // Находим индексы старого и нового элемента
-                val oldIndex = if (oldPackage != null) items.indexOfFirst { it.packageName == oldPackage } else -1
-                val newIndex = if (value != null) items.indexOfFirst { it.packageName == value } else -1
-                
-                if (oldIndex != -1) notifyItemChanged(oldIndex, "DRAG_STATE")
-                if (newIndex != -1) notifyItemChanged(newIndex, "DRAG_STATE")
+
+                val oldIndex = if (oldKey != null) items.indexOfFirst { identityOf(it) == oldKey } else -1
+                val newIndex = if (value != null) items.indexOfFirst { identityOf(it) == value } else -1
+
+                if (oldIndex != -1) notifyItemChanged(oldIndex, PAYLOAD_DRAG_STATE)
+                if (newIndex != -1) notifyItemChanged(newIndex, PAYLOAD_DRAG_STATE)
             }
-        }
-    private var attachedRecyclerView: RecyclerView? = null
-    var isEditMode: Boolean = false
-        set(value) {
-            if (field != value) {
-                field = value
-                notifyItemRangeChanged(0, itemCount, "EDIT_MODE")
-            }
-        }
-    var selectedApps: Set<String> = emptySet()
-        set(value) {
-            field = value
-            notifyItemRangeChanged(0, itemCount, "EDIT_MODE")
         }
 
+    /** Совместимость со старыми вызовами по packageName. */
+    var draggedItemPackage: String?
+        get() = draggedItemKey?.removePrefix("a:")?.substringBefore(':')
+        set(value) {
+            draggedItemKey = value?.let { "a:$it:0" }
+        }
+
+    private var attachedRecyclerView: RecyclerView? = null
+    var isEditMode: Boolean = false
+        private set
+    var selectedApps: Set<String> = emptySet()
+        private set
+
     fun setEditMode(editMode: Boolean, selected: Set<String>) {
+        val sel = selected.toSet()
+        // Раньше сеттеры сами слали notify, а метод слал третий — три полных
+        // notifyItemRangeChanged на одно переключение и на каждый свайп страницы
+        if (this.isEditMode == editMode && this.selectedApps == sel) return
         this.isEditMode = editMode
-        this.selectedApps = selected.toSet()
-        notifyItemRangeChanged(0, itemCount, "EDIT_MODE")
+        this.selectedApps = sel
+        notifyItemRangeChanged(0, itemCount, PAYLOAD_EDIT_MODE)
     }
 
     var itemHeight: Int = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -78,6 +112,14 @@ class AppsAdapter(
             }
         }
 
+    /**
+     * Доступ без копирования. SpanSizeLookup вызывает это N раз за каждый
+     * layout-проход, а getItems() копировал массив — получалось O(N²)
+     * копий и N аллокаций ArrayList на проход.
+     */
+    fun getItemOrNull(position: Int): AppItem? = items.getOrNull(position)
+
+    /** Снимок списка — только там, где список реально нужно скопировать. */
     fun getItems(): List<AppItem> = ArrayList(items)
 
     fun swapItems(from: Int, to: Int) {
@@ -102,63 +144,91 @@ class AppsAdapter(
     }
 
 
+    private val submitScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var submitGeneration = 0
+
     fun submitList(newItems: List<AppItem>) {
+        // быстрый выход, когда данные не изменились: раньше даже он
+        // копировал оба списка и считал DiffUtil
+        if (items.size == newItems.size && items.indices.all { items[it] == newItems[it] }) return
+
         val oldItems = ArrayList(items)
         val copiedNewItems = ArrayList(newItems)
+        val generation = ++submitGeneration
 
-        val diffResult = androidx.recyclerview.widget.DiffUtil.calculateDiff(object : androidx.recyclerview.widget.DiffUtil.Callback() {
-            override fun getOldListSize(): Int = oldItems.size
-            override fun getNewListSize(): Int = copiedNewItems.size
+        submitScope.launch {
+            // DiffUtil — O(N*D); на каждый символ поиска он считался
+            // на главном потоке и блокировал кадр
+            val diffResult = withContext(Dispatchers.Default) {
+                androidx.recyclerview.widget.DiffUtil.calculateDiff(object : androidx.recyclerview.widget.DiffUtil.Callback() {
+                    override fun getOldListSize(): Int = oldItems.size
+                    override fun getNewListSize(): Int = copiedNewItems.size
 
-            override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                val old = oldItems[oldItemPosition]
-                val new = copiedNewItems[newItemPosition]
-                if (old.isEmpty && new.isEmpty) return oldItemPosition == newItemPosition
-                if (old.isEmpty || new.isEmpty) return false
+                    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                        val old = oldItems[oldItemPosition]
+                        val new = copiedNewItems[newItemPosition]
+                        // пустые слоты взаимозаменяемы; раньше сравнение по позиции
+                        // превращало сдвиг пустой ячейки в remove+insert, то есть
+                        // в переинфлят item_app_grid.xml целиком
+                        if (old.isEmpty || new.isEmpty) return old.isEmpty && new.isEmpty
+                        return identityOf(old) == identityOf(new)
+                    }
 
-                if (old.isFolder && new.isFolder) return old.folderId == new.folderId
-                if (old.isWidget && new.isWidget) return old.widgetId == new.widgetId
-                return old.packageName == new.packageName
+                    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+                        val old = oldItems[oldItemPosition]
+                        val new = copiedNewItems[newItemPosition]
+                        if (old.isEmpty || new.isEmpty) return old.isEmpty && new.isEmpty
+                        return old.label == new.label &&
+                               old.isFolder == new.isFolder &&
+                               old.folderSize == new.folderSize &&
+                               old.isWidget == new.isWidget &&
+                               old.widgetId == new.widgetId &&
+                               old.widgetSpanX == new.widgetSpanX &&
+                               old.widgetSpanY == new.widgetSpanY &&
+                               old.isSecondSpace == new.isSecondSpace &&
+                               old.userHandle == new.userHandle &&
+                               old.icon === new.icon &&
+                               // не только size: перестановка двух иконок в папке
+                               // оставляла старые мини-превью
+                               old.folderApps == new.folderApps
+                    }
+                })
             }
 
-            override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-                val old = oldItems[oldItemPosition]
-                val new = copiedNewItems[newItemPosition]
-                if (old.isEmpty && new.isEmpty) return true
-                if (old.isEmpty || new.isEmpty) return false
-                return old.label == new.label &&
-                       old.isFolder == new.isFolder &&
-                       old.folderSize == new.folderSize &&
-                       old.isWidget == new.isWidget &&
-                       old.widgetId == new.widgetId &&
-                       old.folderApps.size == new.folderApps.size
-            }
-        })
+            // пока считался diff, пришёл более новый submitList — его результат важнее
+            if (generation != submitGeneration) return@launch
 
-        items.clear()
-        items.addAll(copiedNewItems)
-        diffResult.dispatchUpdatesTo(this@AppsAdapter)
+            items.clear()
+            items.addAll(copiedNewItems)
+            diffResult.dispatchUpdatesTo(this@AppsAdapter)
+        }
     }
 
     fun updateConfig(shape: IconShape, labels: Boolean, scale: Float, smoothAnimations: Boolean = true) {
+        // раньше полный notifyItemRangeChanged слался всегда, даже когда
+        // конфигурация не менялась, а вызывался он на каждый updateData
+        if (this.iconShape == shape && this.showLabels == labels
+            && this.iconScale == scale && this.smoothAnimations == smoothAnimations
+        ) return
         this.iconShape = shape
         this.showLabels = labels
         this.iconScale = scale
         this.smoothAnimations = smoothAnimations
-        notifyItemRangeChanged(0, items.size)
+        notifyItemRangeChanged(0, itemCount, PAYLOAD_CONFIG)
     }
 
     fun updateBadgeCounts(counts: Map<String, Int>) {
-        if (this.badgeCounts === counts) return
+        // === на ссылку: getAllBadgeCounts() возвращает новый объект каждый вызов,
+        // поэтому проверка никогда не срабатывала
+        if (this.badgeCounts == counts) return
         val oldCounts = this.badgeCounts
         this.badgeCounts = counts
-        // Only update items whose badge count actually changed
+        // payload вместо полного bind: иначе DefaultItemAnimator запускал
+        // change-анимацию с кросс-фейдом на каждое уведомление
         for (i in items.indices) {
             val pkg = items[i].packageName
-            val oldVal = oldCounts[pkg] ?: 0
-            val newVal = counts[pkg] ?: 0
-            if (oldVal != newVal) {
-                notifyItemChanged(i)
+            if ((oldCounts[pkg] ?: 0) != (counts[pkg] ?: 0)) {
+                notifyItemChanged(i, PAYLOAD_BADGE)
             }
         }
     }
@@ -235,28 +305,112 @@ class AppsAdapter(
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: MutableList<Any>) {
-        if (payloads.contains("EDIT_MODE")) {
-            if (holder is AppViewHolder && !items[position].isEmpty) {
+        val item = items.getOrNull(position) ?: return
+        var needsFullBind = payloads.isEmpty()
+
+        // RecyclerView объединяет все payload'ы позиции в ОДИН список.
+        // Обработка через if/else if теряла часть изменений при батче:
+        // например, EDIT_MODE проходил, а DRAG_STATE молча выбрасывался,
+        // и перетаскиваемая иконка оставалась видимой «призраком».
+        if (payloads.contains(PAYLOAD_EDIT_MODE)) {
+            if (holder is AppViewHolder && !item.isEmpty) {
                 holder.updateEditMode(isEditMode)
+            } else {
+                needsFullBind = true
             }
-        } else if (payloads.contains("DRAG_STATE")) {
-            val item = items.getOrNull(position) ?: return
-            val isDragged = (draggedItemPackage != null && item.packageName == draggedItemPackage)
-            holder.itemView.alpha = if (isDragged) 0f else 1.0f
-        } else {
-            super.onBindViewHolder(holder, position, payloads)
+        }
+        if (payloads.contains(PAYLOAD_DRAG_STATE)) {
+            holder.applyDragAlpha(item)
+        }
+        if (payloads.contains(PAYLOAD_BADGE)) {
+            if (holder is AppViewHolder) {
+                holder.applyBadge(item)
+            } else {
+                needsFullBind = true
+            }
+        }
+        if (payloads.contains(PAYLOAD_CONFIG)) {
+            needsFullBind = true
+        }
+
+        if (needsFullBind) {
+            when (holder) {
+                is WidgetViewHolder -> holder.bind(item)
+                is AppViewHolder -> holder.bind(item)
+            }
         }
     }
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        val item = items.getOrNull(position) ?: return
         when (holder) {
-            is WidgetViewHolder -> holder.bind(items[position])
-            is AppViewHolder -> holder.bind(items[position])
+            is WidgetViewHolder -> holder.bind(item)
+            is AppViewHolder -> holder.bind(item)
+        }
+    }
+
+    /**
+     * Handler-ы отложенных long-press отменяются при переработке холдера.
+     * Раньше отмен шёл только внутри замыкания того же bind, поэтому после
+     * переработки старый Runnable срабатывал через 200 мс и начинал drag
+     * с уже отпущенным пальцем.
+     */
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        super.onViewRecycled(holder)
+        when (holder) {
+            is AppViewHolder -> holder.cancelPendingCallbacks()
+            is WidgetViewHolder -> holder.detach()
         }
     }
 
     inner class AppViewHolder(private val binding: ItemAppGridBinding) :
         RecyclerView.ViewHolder(binding.root) {
+
+        /** Отложенный long-press на пустой ячейке. */
+        private var pendingLongPress: Runnable? = null
+        private var downX = 0f
+        private var downY = 0f
+        private var hasLongPressed = false
+        private var downRawX = 0f
+        private var downRawY = 0f
+
+        private val enlargedMiniViews: Array<android.widget.ImageView> = arrayOf(
+            binding.ivEnlargedMini1,
+            binding.ivEnlargedMini2,
+            binding.ivEnlargedMini3,
+            binding.ivEnlargedMini4
+        )
+        private val folderMiniViews: Array<android.widget.ImageView> = arrayOf(
+            binding.folderMiniIcon1,
+            binding.folderMiniIcon2,
+            binding.folderMiniIcon3,
+            binding.folderMiniIcon4
+        )
+
+        fun cancelPendingCallbacks() {
+            pendingLongPress?.let { TOUCH_HANDLER.removeCallbacks(it) }
+            pendingLongPress = null
+        }
+
+        fun applyDragAlpha(item: AppItem) {
+            val draggedKey = draggedItemKey
+            val isDragged = draggedKey != null && identityOf(item) == draggedKey
+            val target = if (isDragged) 0f else 1f
+            if (binding.root.alpha != target) binding.root.alpha = target
+        }
+
+        fun applyBadge(item: AppItem) {
+            renderBadge(item)
+        }
+
+        /** Высоту задаём через сеттер layoutParams — прямая мутация поля не вызывает requestLayout(). */
+        private fun applyCellHeight(height: Int) {
+            if (height <= 0) return
+            val lp = binding.root.layoutParams ?: return
+            if (lp.height == height) return
+            lp.height = height
+            binding.root.layoutParams = lp
+        }
 
         fun bind(item: AppItem) {
             val density = binding.root.resources.displayMetrics.density
@@ -264,9 +418,7 @@ class AppsAdapter(
             // Динамический адаптивный размер иконки под высоту ячейки сетки, чтобы подписи ВСЕГДА помещались
             val finalIconSize: Int
             if (itemHeight > 0) {
-                if (binding.root.layoutParams.height != itemHeight) {
-                    binding.root.layoutParams.height = itemHeight
-                }
+                applyCellHeight(itemHeight)
                 val reservedForLabel = if (showLabels) (18 * density).toInt() else (4 * density).toInt()
                 val availableHeight = (itemHeight - reservedForLabel).coerceAtLeast((28 * density).toInt())
                 val baseSize = availableHeight.coerceAtMost((56 * density).toInt())
@@ -284,71 +436,72 @@ class AppsAdapter(
                 iconLp.height = finalIconSize
                 binding.iconContainer.layoutParams = iconLp
             }
-            
+
             // Сброс свойств (важно для переиспользования View)
+            cancelPendingCallbacks()
             binding.appIcon.alpha = 1.0f
             binding.appLabel.alpha = 1.0f
             binding.root.scaleX = 1.0f
             binding.root.scaleY = 1.0f
-            
-            if (draggedItemPackage != null && item.packageName == draggedItemPackage) {
-                binding.root.alpha = 0f
-            } else {
-                binding.root.alpha = 1.0f
-            }
+            applyDragAlpha(item)
 
             if (item.isEmpty) {
+                // Полный сброс: ветка enlarged выставляет iconContainer = GONE и
+                // layoutEnlargedFolder = VISIBLE, но не возвращает их назад.
+                // Без этого переработанный холдер показывал чужое превью папки,
+                // и клик по нему открывал прошлое приложение.
                 binding.appLabel.visibility = View.GONE
                 binding.appIcon.visibility = View.INVISIBLE
+                binding.iconContainer.visibility = View.VISIBLE
                 binding.layoutFolderPreview.visibility = View.GONE
+                binding.layoutEnlargedFolder.visibility = View.GONE
                 binding.ivSelectCircle.visibility = View.GONE
+                binding.ivEnlargedSelectCircle.visibility = View.GONE
                 binding.cloneBadge.visibility = View.GONE
                 binding.notificationBadge.visibility = View.GONE
                 binding.folderDropHighlight.visibility = View.GONE
 
-                var downX = 0f
-                var downY = 0f
-                var emptyLongPressRunnable: Runnable? = null
-                var hasLongPressed = false
-                val handler = Handler(Looper.getMainLooper())
+                // Снимаем слушатели с внутренних вьюх enlarged-превью
+                binding.enlargedApp1.setOnClickListener(null)
+                binding.enlargedApp2.setOnClickListener(null)
+                binding.enlargedApp3.setOnClickListener(null)
+                binding.enlargedQuadrant.setOnClickListener(null)
+                binding.ivEnlargedSelectCircle.setOnClickListener(null)
+                binding.ivSelectCircle.setOnClickListener(null)
 
+                hasLongPressed = false
                 binding.root.setOnTouchListener { v, event ->
                     when (event.actionMasked) {
                         android.view.MotionEvent.ACTION_DOWN -> {
                             downX = event.rawX
                             downY = event.rawY
                             hasLongPressed = false
-                            emptyLongPressRunnable = Runnable {
+                            pendingLongPress = Runnable {
                                 hasLongPressed = true
                                 v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                                 onEmptyCellLongClick?.invoke()
                             }
-                            handler.postDelayed(emptyLongPressRunnable!!, 160)
+                            TOUCH_HANDLER.postDelayed(pendingLongPress!!, 160)
                         }
                         android.view.MotionEvent.ACTION_MOVE -> {
                             val diffX = Math.abs(event.rawX - downX)
                             val diffY = Math.abs(event.rawY - downY)
-                            if (diffX > 12 * v.resources.displayMetrics.density || diffY > 12 * v.resources.displayMetrics.density) {
-                                emptyLongPressRunnable?.let { handler.removeCallbacks(it) }
-                                emptyLongPressRunnable = null
+                            if (diffX > 12 * density || diffY > 12 * density) {
+                                cancelPendingCallbacks()
                             }
                         }
                         android.view.MotionEvent.ACTION_UP -> {
-                            emptyLongPressRunnable?.let { handler.removeCallbacks(it) }
-                            emptyLongPressRunnable = null
+                            cancelPendingCallbacks()
                             if (!hasLongPressed) {
                                 val diffX = Math.abs(event.rawX - downX)
                                 val diffY = Math.abs(event.rawY - downY)
-                                if (diffX <= 12 * v.resources.displayMetrics.density && diffY <= 12 * v.resources.displayMetrics.density) {
+                                if (diffX <= 12 * density && diffY <= 12 * density) {
                                     v.performClick()
                                     onEmptyCellClick?.invoke()
                                 }
                             }
                         }
-                        android.view.MotionEvent.ACTION_CANCEL -> {
-                            emptyLongPressRunnable?.let { handler.removeCallbacks(it) }
-                            emptyLongPressRunnable = null
-                        }
+                        android.view.MotionEvent.ACTION_CANCEL -> cancelPendingCallbacks()
                     }
                     true
                 }
@@ -364,20 +517,13 @@ class AppsAdapter(
                 binding.layoutEnlargedFolder.visibility = View.VISIBLE
 
                 if (itemHeight > 0) {
-                    val enlargedHeight = itemHeight * 2
-                    if (binding.root.layoutParams.height != enlargedHeight) {
-                        binding.root.layoutParams.height = enlargedHeight
-                    }
+                    applyCellHeight(itemHeight * 2)
                 }
 
-                try {
-                    val activity = binding.root.context as? com.naua_morphix_launcher.app.MainActivity
-                    if (activity != null) {
-                        binding.layoutEnlargedFolder.setupWithActivityRoot()
-                        binding.layoutEnlargedFolder.setRadius(activity.currentSettings.blurRadius)
-                        binding.layoutEnlargedFolder.setGlassEnabled(activity.currentSettings.isGlassEnabled)
-                    }
-                } catch (e: Exception) {}
+                val activity = binding.root.context as? com.naua_morphix_launcher.app.MainActivity
+                if (activity != null) {
+                    binding.layoutEnlargedFolder.setGlassEnabled(activity.currentSettings.isGlassEnabled)
+                }
 
                 // App 1
                 val app1 = item.folderApps.getOrNull(0)
@@ -417,12 +563,8 @@ class AppsAdapter(
 
                 // 4th Quadrant (Folder Open Trigger)
                 val remainingApps = if (item.folderApps.size > 3) item.folderApps.drop(3) else item.folderApps
-                val miniViews = listOf(
-                    binding.ivEnlargedMini1,
-                    binding.ivEnlargedMini2,
-                    binding.ivEnlargedMini3,
-                    binding.ivEnlargedMini4
-                )
+                // без listOf: он создавал новый ArrayList на каждую ячейку-папку
+                val miniViews = enlargedMiniViews
                 for (i in 0..3) {
                     val mini = miniViews[i]
                     if (i < remainingApps.size) {
@@ -456,26 +598,19 @@ class AppsAdapter(
                 binding.iconContainer.visibility = View.VISIBLE
                 binding.appLabel.visibility = if (showLabels) View.VISIBLE else View.GONE
                 binding.appLabel.text = item.label
-                binding.appLabel.textSize = if (itemHeight > 0 && itemHeight < 72 * density) 10.5f else 11.5f
+                // setTextSize безусловно дёргает requestLayout() на каждой ячейке
+                val labelSp = if (itemHeight > 0 && itemHeight < 72 * density) 10.5f else 11.5f
+                if (binding.appLabel.textSize != labelSp) binding.appLabel.textSize = labelSp
 
                 if (item.isFolder) {
                     // Превью папки 2x2
                     binding.appIcon.visibility = View.GONE
                     binding.layoutFolderPreview.visibility = View.VISIBLE
-                    try {
-                        val activity = binding.root.context as? com.naua_morphix_launcher.app.MainActivity
-                        if (activity != null) {
-                            binding.layoutFolderPreview.setupWithActivityRoot()
-                            binding.layoutFolderPreview.setRadius(activity.currentSettings.blurRadius)
-                            binding.layoutFolderPreview.setGlassEnabled(activity.currentSettings.isGlassEnabled)
-                        }
-                    } catch (e: Exception) {}
-                    val miniIcons = listOf(
-                        binding.folderMiniIcon1,
-                        binding.folderMiniIcon2,
-                        binding.folderMiniIcon3,
-                        binding.folderMiniIcon4
-                    )
+                    val activity = binding.root.context as? com.naua_morphix_launcher.app.MainActivity
+                    if (activity != null) {
+                        binding.layoutFolderPreview.setGlassEnabled(activity.currentSettings.isGlassEnabled)
+                    }
+                    val miniIcons = folderMiniViews
                     val miniIconSize = if (finalIconSize < 44 * density) (14 * density).toInt() else (19 * density).toInt()
                     for (i in 0..3) {
                         val miniIconView = miniIcons[i]
@@ -525,34 +660,11 @@ class AppsAdapter(
             // Бейджик Второго пространства / Клона приложения
             binding.cloneBadge.visibility = if (item.isSecondSpace) View.VISIBLE else View.GONE
 
-            // Бейджик непрочитанных уведомлений
-            val unreadCount = badgeCounts[item.packageName] ?: 0
-            if (unreadCount > 0) {
-                val wasGone = binding.notificationBadge.visibility != View.VISIBLE
-                binding.notificationBadge.visibility = View.VISIBLE
-                binding.notificationBadge.text = if (unreadCount > 99) "99+" else unreadCount.toString()
-                if (smoothAnimations && wasGone) {
-                    binding.notificationBadge.scaleX = 0f
-                    binding.notificationBadge.scaleY = 0f
-                    binding.notificationBadge.animate()
-                        .scaleX(1.0f)
-                        .scaleY(1.0f)
-                        .setDuration(180)
-                        .setInterpolator(android.view.animation.OvershootInterpolator(1.5f))
-                        .start()
-                } else {
-                    binding.notificationBadge.scaleX = 1.0f
-                    binding.notificationBadge.scaleY = 1.0f
-                }
-            } else {
-                binding.notificationBadge.visibility = View.GONE
-            }
+            renderBadge(item)
 
-            var downRawX = 0f
-            var downRawY = 0f
-            var longPressRunnable: Runnable? = null
-            var hasLongPressed = false
-            val handler = Handler(Looper.getMainLooper())
+            downRawX = 0f
+            downRawY = 0f
+            hasLongPressed = false
             binding.root.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> {
@@ -567,7 +679,7 @@ class AppsAdapter(
                                 .setInterpolator(android.view.animation.DecelerateInterpolator())
                                 .start()
                         }
-                        longPressRunnable = Runnable {
+                        pendingLongPress = Runnable {
                             hasLongPressed = true
                             v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                             if (onAppStartDrag != null) {
@@ -576,7 +688,7 @@ class AppsAdapter(
                                 onAppLongClick?.invoke(item, binding.root, this)
                             }
                         }
-                        handler.postDelayed(longPressRunnable!!, 200)
+                        TOUCH_HANDLER.postDelayed(pendingLongPress!!, 200)
                     }
                     android.view.MotionEvent.ACTION_MOVE -> {
                         val diffX = Math.abs(event.rawX - downRawX)
@@ -593,8 +705,7 @@ class AppsAdapter(
                                 v.scaleX = 1.0f
                                 v.scaleY = 1.0f
                             }
-                            longPressRunnable?.let { handler.removeCallbacks(it) }
-                            longPressRunnable = null
+                            cancelPendingCallbacks()
                         }
                     }
                     android.view.MotionEvent.ACTION_UP -> {
@@ -609,8 +720,7 @@ class AppsAdapter(
                             v.scaleX = 1.0f
                             v.scaleY = 1.0f
                         }
-                        longPressRunnable?.let { handler.removeCallbacks(it) }
-                        longPressRunnable = null
+                        cancelPendingCallbacks()
                         if (!hasLongPressed) {
                             val diffX = Math.abs(event.rawX - downRawX)
                             val diffY = Math.abs(event.rawY - downRawY)
@@ -632,14 +742,37 @@ class AppsAdapter(
                             v.scaleX = 1.0f
                             v.scaleY = 1.0f
                         }
-                        longPressRunnable?.let { handler.removeCallbacks(it) }
-                        longPressRunnable = null
+                        cancelPendingCallbacks()
                     }
                 }
                 true
             }
             binding.root.setOnClickListener(null)
             binding.root.setOnLongClickListener(null)
+        }
+
+        private fun renderBadge(item: AppItem) {
+            val unreadCount = badgeCounts[item.packageName] ?: 0
+            if (unreadCount > 0) {
+                val wasGone = binding.notificationBadge.visibility != View.VISIBLE
+                binding.notificationBadge.visibility = View.VISIBLE
+                binding.notificationBadge.text = if (unreadCount > 99) "99+" else unreadCount.toString()
+                if (smoothAnimations && wasGone) {
+                    binding.notificationBadge.scaleX = 0f
+                    binding.notificationBadge.scaleY = 0f
+                    binding.notificationBadge.animate()
+                        .scaleX(1.0f)
+                        .scaleY(1.0f)
+                        .setDuration(180)
+                        .setInterpolator(android.view.animation.OvershootInterpolator(1.5f))
+                        .start()
+                } else {
+                    binding.notificationBadge.scaleX = 1.0f
+                    binding.notificationBadge.scaleY = 1.0f
+                }
+            } else {
+                binding.notificationBadge.visibility = View.GONE
+            }
         }
 
         fun updateEditMode(editMode: Boolean) {
@@ -774,17 +907,50 @@ class AppsAdapter(
     inner class WidgetViewHolder(private val binding: ItemWidgetCellBinding) :
         RecyclerView.ViewHolder(binding.root) {
 
+        private var attachedWidgetId: Int? = null
+        private var attachedHostView: View? = null
+        private var widgetDownRawX = 0f
+        private var widgetDownRawY = 0f
+
+        /**
+         * Снимает ссылку на переработанный холдер. Замыкание onWidgetLongClick
+         * удерживало binding целиком, а сам hostView живёт в кэше активности —
+         * то есть переработанный ViewHolder не мог освободиться.
+         */
+        fun detach() {
+            (attachedHostView as? MorphixAppWidgetHostView)?.onWidgetLongClick = null
+            attachedHostView?.setOnTouchListener(null)
+            attachedHostView?.setOnLongClickListener(null)
+            attachedHostView = null
+            attachedWidgetId = null
+        }
+
         fun bind(item: AppItem) {
             val spanY = item.widgetSpanY.coerceAtLeast(1)
             if (itemHeight > 0) {
                 val totalHeight = itemHeight * spanY
-                if (binding.root.layoutParams.height != totalHeight) {
-                    binding.root.layoutParams.height = totalHeight
+                val lp = binding.root.layoutParams
+                if (lp != null && lp.height != totalHeight) {
+                    lp.height = totalHeight
+                    binding.root.layoutParams = lp
                 }
             }
 
-            binding.widgetHostHolder.removeAllViews()
             val widgetId = item.widgetId
+
+            // AppWidgetHostView переинфлит дерево RemoteViews при каждом
+            // attach/detach. Раньше bind делал removeAllViews + addView безусловно,
+            // то есть виджет переподключался на каждом обновлении данных.
+            if (widgetId != null
+                && widgetId == attachedWidgetId
+                && attachedHostView?.parent === binding.widgetHostHolder
+            ) {
+                return
+            }
+
+            detach()
+            binding.widgetHostHolder.removeAllViews()
+
             if (widgetId != null && onGetWidgetHostView != null) {
                 val hostView = onGetWidgetHostView.invoke(widgetId, item)
                 if (hostView != null) {
@@ -794,6 +960,9 @@ class AppsAdapter(
                         FrameLayout.LayoutParams.MATCH_PARENT
                     )
                     binding.widgetHostHolder.addView(hostView, lp)
+                    attachedWidgetId = widgetId
+                    attachedHostView = hostView
+
                     (hostView as? MorphixAppWidgetHostView)?.onWidgetLongClick = { rawX, rawY ->
                         if (onAppStartDrag != null) {
                             onAppStartDrag.invoke(item, binding.root, rawX, rawY)
@@ -802,13 +971,11 @@ class AppsAdapter(
                         }
                     }
 
-                    var downRawX = 0f
-                    var downRawY = 0f
                     hostView.setOnTouchListener { v, event ->
                         when (event.actionMasked) {
                             android.view.MotionEvent.ACTION_DOWN -> {
-                                downRawX = event.rawX
-                                downRawY = event.rawY
+                                widgetDownRawX = event.rawX
+                                widgetDownRawY = event.rawY
                                 if (smoothAnimations) {
                                     v.animate().scaleX(0.98f).scaleY(0.98f).setDuration(120).start()
                                 }
@@ -828,7 +995,7 @@ class AppsAdapter(
 
                     hostView.setOnLongClickListener {
                         if (onAppStartDrag != null) {
-                            onAppStartDrag.invoke(item, binding.root, downRawX, downRawY)
+                            onAppStartDrag.invoke(item, binding.root, widgetDownRawX, widgetDownRawY)
                         } else {
                             onAppLongClick?.invoke(item, binding.root, this)
                         }
@@ -837,13 +1004,11 @@ class AppsAdapter(
                 }
             }
 
-            var downRawX = 0f
-            var downRawY = 0f
             binding.root.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> {
-                        downRawX = event.rawX
-                        downRawY = event.rawY
+                        widgetDownRawX = event.rawX
+                        widgetDownRawY = event.rawY
                         if (smoothAnimations) {
                             v.animate().scaleX(0.98f).scaleY(0.98f).setDuration(120).start()
                         }
@@ -863,7 +1028,7 @@ class AppsAdapter(
 
             binding.root.setOnLongClickListener {
                 if (onAppStartDrag != null) {
-                    onAppStartDrag.invoke(item, binding.root, downRawX, downRawY)
+                    onAppStartDrag.invoke(item, binding.root, widgetDownRawX, widgetDownRawY)
                 } else {
                     onAppLongClick?.invoke(item, binding.root, this)
                 }
@@ -876,33 +1041,38 @@ class AppsAdapter(
         const val VIEW_TYPE_APP = 0
         const val VIEW_TYPE_WIDGET = 1
 
-        fun getShapeModel(shape: IconShape): ShapeAppearanceModel {
-            return when (shape) {
-                IconShape.CIRCLE -> {
-                    ShapeAppearanceModel.builder()
-                        .setAllCornerSizes(RelativeCornerSize(0.5f))
-                        .build()
-                }
-                IconShape.SQUIRCLE, IconShape.ORIGINAL -> {
-                    // Фирменный сквиркл Xiaomi HyperOS
-                    ShapeAppearanceModel.builder()
-                        .setAllCornerSizes(RelativeCornerSize(0.22f))
-                        .build()
-                }
-                IconShape.ROUNDED_SQUARE -> {
-                    ShapeAppearanceModel.builder()
-                        .setAllCornerSizes(RelativeCornerSize(0.16f))
-                        .build()
-                }
-                IconShape.TEARDROP -> {
-                    ShapeAppearanceModel.builder()
-                        .setTopLeftCornerSize(RelativeCornerSize(0.5f))
-                        .setTopRightCornerSize(RelativeCornerSize(0.5f))
-                        .setBottomLeftCornerSize(RelativeCornerSize(0.5f))
-                        .setBottomRightCornerSize(RelativeCornerSize(0.08f))
-                        .build()
+        /**
+         * Кэшированные ShapeAppearanceModel: 4 значения enum, а пересборка
+         * формы заставляла Material пересоздавать маску Path при отрисовке.
+         */
+        fun getShapeModel(shape: IconShape): ShapeAppearanceModel =
+            shapeModelCache.getOrPut(shape) {
+                when (shape) {
+                    IconShape.CIRCLE -> {
+                        ShapeAppearanceModel.builder()
+                            .setAllCornerSizes(RelativeCornerSize(0.5f))
+                            .build()
+                    }
+                    IconShape.SQUIRCLE, IconShape.ORIGINAL -> {
+                        // Фирменный сквиркл Xiaomi HyperOS
+                        ShapeAppearanceModel.builder()
+                            .setAllCornerSizes(RelativeCornerSize(0.22f))
+                            .build()
+                    }
+                    IconShape.ROUNDED_SQUARE -> {
+                        ShapeAppearanceModel.builder()
+                            .setAllCornerSizes(RelativeCornerSize(0.16f))
+                            .build()
+                    }
+                    IconShape.TEARDROP -> {
+                        ShapeAppearanceModel.builder()
+                            .setTopLeftCornerSize(RelativeCornerSize(0.5f))
+                            .setTopRightCornerSize(RelativeCornerSize(0.5f))
+                            .setBottomLeftCornerSize(RelativeCornerSize(0.5f))
+                            .setBottomRightCornerSize(RelativeCornerSize(0.08f))
+                            .build()
+                    }
                 }
             }
-        }
     }
 }

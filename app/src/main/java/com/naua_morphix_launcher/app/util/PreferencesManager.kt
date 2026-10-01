@@ -10,28 +10,41 @@ import com.naua_morphix_launcher.app.model.LayoutMode
 import com.naua_morphix_launcher.app.model.LockType
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 class PreferencesManager(context: Context) {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("morphix_launcher_prefs", Context.MODE_PRIVATE)
 
-    private val orderedPackagesCache = mutableMapOf<Int, List<String>>()
-    private val foldersCache = mutableMapOf<Int, Map<String, FolderItem>>()
+    private val orderedPackagesCache = ConcurrentHashMap<Int, List<String>>()
+    private val foldersCache = ConcurrentHashMap<Int, Map<String, FolderItem>>()
+
+    private var widgetPageMapCache: MutableMap<Int, Int>? = null
+    private val dockPackagesCache = ConcurrentHashMap<Int, List<String>>()
+
+    /**
+     * enumValueOf бросает IllegalArgumentException на любую неизвестную строку.
+     * Для домашнего экрана это = «лаунчер вообще не запускается», поэтому
+     * любое нераспознанное значение (старый бэкап, ручной edit prefs, kill -9
+     * во время apply()) должно молча откатываться к дефолту.
+     */
+    private inline fun <reified T : Enum<T>> safeEnum(raw: String?, default: T): T =
+        if (raw == null) default else enumValues<T>().firstOrNull { it.name == raw } ?: default
 
     fun loadSettings(): LauncherSettings {
         return LauncherSettings(
             isGlassEnabled = prefs.getBoolean("isGlassEnabled", true),
             blurRadius = prefs.getFloat("blurRadius", 18f),
             glassAlpha = prefs.getFloat("glassAlpha", 0.22f),
-            iconShape = IconShape.valueOf(prefs.getString("iconShape", IconShape.SQUIRCLE.name) ?: IconShape.SQUIRCLE.name),
+            iconShape = safeEnum(prefs.getString("iconShape", null), IconShape.SQUIRCLE),
             iconScale = prefs.getFloat("iconScale", 1.0f),
             showLabels = prefs.getBoolean("showLabels", true),
-            layoutMode = LayoutMode.valueOf(prefs.getString("layoutMode", LayoutMode.DRAWER.name) ?: LayoutMode.DRAWER.name),
-            gridColumns = prefs.getInt("gridColumns", 5),
-            gridRows = prefs.getInt("gridRows", 9),
+            layoutMode = safeEnum(prefs.getString("layoutMode", null), LayoutMode.DRAWER),
+            gridColumns = prefs.getInt("gridColumns", 5).coerceIn(3, 8),
+            gridRows = prefs.getInt("gridRows", 9).coerceIn(3, 12),
             isDockEnabled = prefs.getBoolean("isDockEnabled", true),
-            dockStyle = DockStyle.valueOf(prefs.getString("dockStyle", DockStyle.FLOATING.name) ?: DockStyle.FLOATING.name),
+            dockStyle = safeEnum(prefs.getString("dockStyle", null), DockStyle.FLOATING),
             dockIconCount = prefs.getInt("dockIconCount", 5),
             showSearchOnHome = prefs.getBoolean("showSearchOnHome", true),
             showSearchInDrawer = prefs.getBoolean("showSearchInDrawer", true),
@@ -39,8 +52,9 @@ class PreferencesManager(context: Context) {
             enableTapToLock = prefs.getBoolean("enableTapToLock", true),
             tapsToLockCount = prefs.getInt("tapsToLockCount", 2),
             showClockWidget = prefs.getBoolean("showClockWidget", true),
-            lockType = LockType.valueOf(prefs.getString("lockType", LockType.BIOMETRIC_OR_PIN.name) ?: LockType.BIOMETRIC_OR_PIN.name),
-            hiddenPackages = prefs.getStringSet("hiddenPackages", emptySet()) ?: emptySet(),
+            lockType = safeEnum(prefs.getString("lockType", null), LockType.BIOMETRIC_OR_PIN),
+            // getStringSet отдаёт ВНУТРЕННИЙ экземпляр prefs — его нельзя мутировать
+            hiddenPackages = prefs.getStringSet("hiddenPackages", emptySet())?.toSet() ?: emptySet(),
             smoothAnimations = prefs.getBoolean("smoothAnimations", true)
         )
     }
@@ -66,14 +80,15 @@ class PreferencesManager(context: Context) {
             .putInt("tapsToLockCount", settings.tapsToLockCount)
             .putBoolean("showClockWidget", settings.showClockWidget)
             .putString("lockType", settings.lockType.name)
-            .putStringSet("hiddenPackages", settings.hiddenPackages)
+            .putStringSet("hiddenPackages", settings.hiddenPackages.toSet())
             .putBoolean("smoothAnimations", settings.smoothAnimations)
             .apply()
     }
 
     fun getHomeScreenPackages(spaceIndex: Int = 0): Set<String> {
         val key = if (spaceIndex == 0) "homeScreenPackages" else "homeScreenPackages_space_$spaceIndex"
-        return prefs.getStringSet(key, null) ?: emptySet()
+        // .toSet() — getStringSet возвращает внутренний экземпляр SharedPreferences
+        return prefs.getStringSet(key, null)?.toSet() ?: emptySet()
     }
 
     companion object {
@@ -95,16 +110,20 @@ class PreferencesManager(context: Context) {
 
     fun getDockPackages(spaceIndex: Int = 0): List<String> {
         val key = if (spaceIndex == 0) "dockPackages" else "dockPackages_space_$spaceIndex"
+        dockPackagesCache[spaceIndex]?.let { return ArrayList(it) }
         val raw = prefs.getString(key, null)
-        return if (raw != null) {
+        val list = if (raw != null) {
             raw.split(",").map { if (it == EMPTY_CELL_KEY) "" else it }
         } else {
             emptyList()
         }
+        dockPackagesCache[spaceIndex] = list
+        return ArrayList(list)
     }
 
     fun setDockPackages(spaceIndex: Int = 0, packages: List<String>) {
         val key = if (spaceIndex == 0) "dockPackages" else "dockPackages_space_$spaceIndex"
+        dockPackagesCache[spaceIndex] = ArrayList(packages)
         val raw = packages.joinToString(",") { if (it.isEmpty()) EMPTY_CELL_KEY else it }
         prefs.edit().putString(key, raw).apply()
     }
@@ -130,9 +149,13 @@ class PreferencesManager(context: Context) {
     fun setHomeScreenPackages(spaceIndex: Int = 0, packages: Set<String>) {
         val legacyKey = if (spaceIndex == 0) "homeScreenPackages" else "homeScreenPackages_space_$spaceIndex"
         val orderedKey = if (spaceIndex == 0) "homeScreenOrderedPackages" else "homeScreenOrderedPackages_space_$spaceIndex"
+        // sortedBy гарантирует стабильный порядок: из Set иначе получился бы
+        // произвольный порядок хеш-таблицы, и иконки «прыгали» бы при перезапуске
+        val ordered = packages.sorted()
+        orderedPackagesCache[spaceIndex] = ordered
         prefs.edit()
-            .putStringSet(legacyKey, packages)
-            .putString(orderedKey, packages.joinToString(","))
+            .putStringSet(legacyKey, packages.toSet())
+            .putString(orderedKey, ordered.joinToString(","))
             .apply()
     }
 
@@ -167,11 +190,11 @@ class PreferencesManager(context: Context) {
     }
 
     fun getSecondSpacePackages(): Set<String> {
-        return prefs.getStringSet("secondSpacePackages", emptySet()) ?: emptySet()
+        return prefs.getStringSet("secondSpacePackages", emptySet())?.toSet() ?: emptySet()
     }
 
     fun setSecondSpacePackages(packages: Set<String>) {
-        prefs.edit().putStringSet("secondSpacePackages", packages).apply()
+        prefs.edit().putStringSet("secondSpacePackages", packages.toSet()).apply()
     }
 
     fun addSecondSpacePackage(packageName: String) {
@@ -200,25 +223,31 @@ class PreferencesManager(context: Context) {
     }
 
     fun getWidgetPageMap(): Map<Int, Int> {
-        val raw = prefs.getString("page_widgets_map", null) ?: return emptyMap()
+        widgetPageMapCache?.let { return it }
         val result = mutableMapOf<Int, Int>()
-        try {
-            val json = JSONObject(raw)
-            for (key in json.keys()) {
-                val id = key.toIntOrNull()
-                if (id != null) {
-                    result[id] = json.getInt(key)
+        val raw = prefs.getString("page_widgets_map", null)
+        if (raw != null) {
+            try {
+                val json = JSONObject(raw)
+                for (key in json.keys()) {
+                    val id = key.toIntOrNull() ?: continue
+                    // optInt вместо getInt: одно нечисловое значение раньше
+                    // прерывало весь цикл и теряло остальные привязки
+                    val page = json.optInt(key, -1)
+                    if (page >= 0) result[id] = page
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
+        widgetPageMapCache = result
         return result
     }
 
     fun setWidgetPage(id: Int, page: Int) {
         val current = getWidgetPageMap().toMutableMap()
         current[id] = page
+        widgetPageMapCache = current
         val json = JSONObject()
         for ((k, v) in current) {
             json.put(k.toString(), v)
@@ -229,6 +258,7 @@ class PreferencesManager(context: Context) {
     fun removeWidgetPage(id: Int) {
         val current = getWidgetPageMap().toMutableMap()
         current.remove(id)
+        widgetPageMapCache = current
         val json = JSONObject()
         for ((k, v) in current) {
             json.put(k.toString(), v)
@@ -263,33 +293,42 @@ class PreferencesManager(context: Context) {
     fun getFolders(spaceIndex: Int = 0): Map<String, FolderItem> {
         foldersCache[spaceIndex]?.let { return it }
         val key = if (spaceIndex == 0) "folders_data" else "folders_data_space_$spaceIndex"
-        val raw = prefs.getString(key, null) ?: return emptyMap()
+        val raw = prefs.getString(key, null)
         val result = mutableMapOf<String, FolderItem>()
-        try {
-            val jsonArray = JSONArray(raw)
-            for (i in 0 until jsonArray.length()) {
-                val obj = jsonArray.getJSONObject(i)
-                val id = obj.getString("id")
-                val name = obj.optString("name", "Папка")
-                val pkgs = mutableListOf<String>()
-                val arr = obj.optJSONArray("packages")
-                if (arr != null) {
-                    for (j in 0 until arr.length()) {
-                        pkgs.add(arr.getString(j))
+        if (raw != null) {
+            try {
+                val jsonArray = JSONArray(raw)
+                for (i in 0 until jsonArray.length()) {
+                    // optJSONObject + continue вместо getString: раньше один битый
+                    // элемент обрывал цикл и кэшировалась неполная карта папок
+                    val obj = jsonArray.optJSONObject(i) ?: continue
+                    val id = obj.optString("id").takeIf { it.isNotEmpty() } ?: continue
+                    val pkgs = mutableListOf<String>()
+                    val arr = obj.optJSONArray("packages")
+                    if (arr != null) {
+                        for (j in 0 until arr.length()) {
+                            arr.optString(j)?.takeIf { it.isNotEmpty() }?.let { pkgs.add(it) }
+                        }
                     }
+                    result[id] = FolderItem(
+                        id,
+                        obj.optString("name", "Папка"),
+                        pkgs,
+                        obj.optString("size", "REGULAR")
+                    )
                 }
-                val size = obj.optString("size", "REGULAR")
-                result[id] = FolderItem(id, name, pkgs, size)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
         foldersCache[spaceIndex] = result
         return result
     }
 
     fun saveFolders(spaceIndex: Int = 0, folders: Map<String, FolderItem>) {
-        foldersCache[spaceIndex] = folders
+        // копия, чтобы вызывающий код не мутировал наш кэш
+        val snapshot = folders.toMap()
+        foldersCache[spaceIndex] = snapshot
         val key = if (spaceIndex == 0) "folders_data" else "folders_data_space_$spaceIndex"
         val jsonArray = JSONArray()
         for ((_, folder) in folders) {

@@ -20,8 +20,40 @@ import android.graphics.Rect
 import android.view.View
 
 object AppLoader {
-    // Кэш иконок для ускорения загрузки и скролла
-    private val iconCache = LruCache<String, Drawable>(150)
+    /**
+     * Кэш иконок по размеру в байтах, а не по количеству.
+     * Иконки — растеризованные Drawable, на xxxhdpi это ~0.5 МБ каждая,
+     * поэтому 150 штук держали бы ~86 МБ и никогда бы не вытеснялись.
+     */
+    private const val ICON_CACHE_BYTES = 8 * 1024 * 1024
+
+    private val iconCache = object : LruCache<String, Drawable>(ICON_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: Drawable): Int = approxDrawableBytes(value)
+    }
+
+    private val labelCache = LruCache<String, String>(256)
+
+    /** Вызывается из MorphixApp.onTrimMemory — освобождает кэш при нехватке памяти. */
+    fun onTrimMemory(trimLevel: Int) {
+        if (trimLevel >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            iconCache.evictAll()
+            labelCache.evictAll()
+        }
+    }
+
+    /** Сбрасывает кэш конкретного пакета (обновление/удаление приложения). */
+    fun invalidatePackage(packageName: String) {
+        val prefix = "$packageName#"
+        iconCache.snapshot().keys.filter { it.startsWith(prefix) }.forEach { iconCache.remove(it) }
+        labelCache.snapshot().keys.filter { it.startsWith(prefix) }.forEach { labelCache.remove(it) }
+    }
+
+    /** Грубая оценка размера Drawable в байтах, чтобы не удерживать десятки мегабайт иконок. */
+    private fun approxDrawableBytes(d: Drawable): Int {
+        val w = (if (d.intrinsicWidth > 0) d.intrinsicWidth else 96).coerceIn(1, 1024)
+        val h = (if (d.intrinsicHeight > 0) d.intrinsicHeight else 96).coerceIn(1, 1024)
+        return w * h * 4 + 16 // ARGB_8888 + заголовок объекта
+    }
 
     /**
      * Загрузка ВСЕХ приложений: Основное пространство + Второе пространство (Dual Apps / Work Profile)
@@ -49,13 +81,18 @@ object AppLoader {
                             if (seenSignatures.contains(sig)) continue
                             seenSignatures.add(sig)
 
-                            val label = activity.label?.toString() ?: pkg
-                            
+                            // getLabel/getBadgedIcon — кросс-процессные вызовы в system_server,
+                            // поэтому результат кэшируем, иначе повторная загрузка стоит секунды
+                            var label = labelCache.get(sig)
                             var icon = iconCache.get(sig)
-                            if (icon == null) {
-                                icon = activity.getBadgedIcon(context.resources.configuration.densityDpi)
-                                if (icon != null) {
-                                    iconCache.put(sig, icon)
+                            if (label == null || icon == null) {
+                                if (label == null) {
+                                    label = activity.label?.toString() ?: pkg
+                                    labelCache.put(sig, label)
+                                }
+                                if (icon == null) {
+                                    icon = activity.getBadgedIcon(context.resources.configuration.densityDpi)
+                                    if (icon != null) iconCache.put(sig, icon)
                                 }
                             }
 
@@ -91,7 +128,10 @@ object AppLoader {
             try {
                 val resolveInfos = packageManager.queryIntentActivities(mainIntent, flags)
             for (info in resolveInfos) {
-                val pkgName = info.activityInfo.packageName
+                // activityInfo — nullable-поле ResolveInfo: без проверки один битый
+                // элемент ронял весь цикл и терялись все приложения после него
+                val activityInfo = info.activityInfo ?: continue
+                val pkgName = activityInfo.packageName
                 if (pkgName == context.packageName) continue
 
                 val sig = "$pkgName#$myUser"
@@ -120,7 +160,7 @@ object AppLoader {
                     AppItem(
                         label = label,
                         packageName = pkgName,
-                        activityName = info.activityInfo.name,
+                        activityName = activityInfo.name,
                         icon = icon,
                         userHandle = myUser,
                         isSecondSpace = false
