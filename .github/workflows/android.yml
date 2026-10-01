@@ -82,7 +82,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           {
-            echo "storeFile=../keystore.jks"
+            echo "storeFile=keystore.jks"
             echo "storePassword=$KEYSTORE_PASSWORD"
             echo "keyAlias=$KEY_ALIAS"
             echo "keyPassword=$KEY_PASSWORD"
