@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/folderFullscreenRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/transparent"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- Simple dim overlay instead of LiquidGlassView for background -->
+    <!-- folderBlurView is kept as a plain View for compatibility with existing code -->
+    <View
+        android:id="@+id/folderDimOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#73000000" />
+
+    <!-- Контейнер содержимого по центру экрана в стиле Xiaomi HyperOS -->
+    <LinearLayout
+        android:id="@+id/folderContentContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp">
+
+        <!-- Верхний пружинящий отступ для центрирования окна папки -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Крупный заголовок папки в стиле HyperOS -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <EditText
+                android:id="@+id/etFolderTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@null"
+                android:gravity="center"
+                android:hint="Папка"
+                android:imeOptions="actionDone"
+                android:inputType="textCapWords"
+                android:maxLength="28"
+                android:maxLines="1"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:shadowColor="#99000000"
+                android:shadowDx="1"
+                android:shadowDy="2"
+                android:shadowRadius="4"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#80FFFFFF"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                tools:text="Яндекс" />
+
+            <ImageView
+                android:id="@+id/ivRenameHint"
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_marginStart="2dp"
+                android:alpha="0.75"
+                android:contentDescription="Переименовать"
+                android:src="@drawable/ic_edit_xiaomi"
+                app:tint="#FFFFFF" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/tvFolderHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="22dp"
+            android:shadowColor="#80000000"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="2"
+            android:text="Нажмите, чтобы переименовать"
+            android:textColor="#99FFFFFF"
+            android:textSize="12sp" />
+
+        <!-- Парящее окно Liquid Glass по центру экрана -->
+        <com.naua_morphix_launcher.app.views.LiquidGlassView
+            android:id="@+id/glassFolderCard"
+            android:layout_width="310dp"
+            android:layout_height="wrap_content"
+            android:elevation="20dp"
+            app:lg_overlayColor="#30FFFFFF"
+            app:lg_fallbackColor="#FF2A2A2E"
+            app:lg_cornerRadius="32dp">
+
+            <LinearLayout
+                android:id="@+id/folderCardWindow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:paddingStart="8dp"
+                android:paddingTop="14dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="12dp">
+
+            <!-- Горизонтальный пейджер страниц папки (по 3x3 иконки на страницу) -->
+            <androidx.viewpager2.widget.ViewPager2
+                android:id="@+id/vpFolderPages"
+                android:layout_width="match_parent"
+                android:layout_height="270dp"
+                android:overScrollMode="never" />
+
+            <!-- Индикатор страниц папки (точки • • • когда страниц больше 1) -->
+            <LinearLayout
+                android:id="@+id/folderPageIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="12dp"
+                android:layout_marginTop="6dp"
+                android:layout_marginBottom="4dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone" />
+
+            <!-- Кнопка «Добавить приложения» внутри карточки -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddAppToFolder"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:backgroundTint="#26FFFFFF"
+                    android:paddingStart="16dp"
+                    android:paddingEnd="16dp"
+                    android:text="➕ Добавить"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    app:cornerRadius="18dp" />
+
+            </LinearLayout>
+
+            </LinearLayout>
+        </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+        <!-- Нижний пружинящий отступ -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1.3" />
+
+    </LinearLayout>
+
+</FrameLayout>

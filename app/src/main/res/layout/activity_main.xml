@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" xmlns:tools="http://schemas.android.com/tools" android:id="@+id/rootView" android:layout_width="match_parent" android:layout_height="match_parent" android:fitsSystemWindows="false">
+
+    <!-- Главный рабочий стол -->
+    <androidx.constraintlayout.widget.ConstraintLayout android:id="@+id/homeScreenContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:clipChildren="false" android:clipToPadding="false" android:paddingTop="42dp" android:paddingBottom="8dp">
+
+        <!-- Индикатор Второго пространства (показывается только во 2-м пространстве) -->
+        <LinearLayout android:id="@+id/badgeSecondSpace" android:layout_width="wrap_content" android:layout_height="36dp" android:layout_marginEnd="20dp" android:layout_marginTop="28dp" android:background="@drawable/glass_search_background" android:gravity="center_vertical" android:paddingStart="12dp" android:paddingEnd="12dp" android:visibility="gone" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" tools:visibility="visible">
+
+            <ImageView android:layout_width="16dp" android:layout_height="16dp" android:contentDescription="@null" android:src="@drawable/ic_clone_badge" app:tint="#64B5F6" />
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="2-е пространство" android:textColor="#E6FFFFFF" android:textSize="12sp" android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Кнопка «Готово» в правом верхнем углу (Xiaomi Edit Mode) -->
+        <com.naua_morphix_launcher.app.views.LiquidGlassView android:id="@+id/glassEditDone" android:layout_width="wrap_content" android:layout_height="38dp" android:layout_marginTop="32dp" android:layout_marginEnd="20dp" android:elevation="8dp" android:visibility="gone" app:lg_cornerRadius="19dp" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintTop_toTopOf="parent" tools:visibility="visible">
+
+            <TextView android:id="@+id/btnEditDone" android:layout_width="wrap_content" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:gravity="center" android:paddingStart="24dp" android:paddingEnd="24dp" android:text="Готово" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+        </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+        <!-- Кнопка «Удалить экран» в левом верхнем углу (Xiaomi Edit Mode) -->
+        <com.naua_morphix_launcher.app.views.LiquidGlassView android:id="@+id/glassDeletePage" android:layout_width="wrap_content" android:layout_height="38dp" android:layout_marginTop="32dp" android:layout_marginStart="20dp" android:elevation="8dp" android:visibility="gone" app:lg_cornerRadius="19dp" app:layout_constraintStart_toStartOf="parent" app:layout_constraintTop_toTopOf="parent" tools:visibility="visible">
+
+            <LinearLayout android:id="@+id/btnDeletePage" android:layout_width="wrap_content" android:layout_height="match_parent" android:clickable="true" android:focusable="true" android:gravity="center" android:orientation="horizontal" android:paddingStart="14dp" android:paddingEnd="16dp">
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🗑️" android:textSize="15sp" />
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="6dp" android:text="Удалить" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+            </LinearLayout>
+        </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+        <!-- Page Indicator -->
+        <LinearLayout android:id="@+id/pageIndicatorLayout" android:layout_width="wrap_content" android:layout_height="14dp" android:layout_marginBottom="0dp" android:gravity="center" android:orientation="horizontal" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" />
+
+        <!-- ViewPager -->
+        <androidx.viewpager2.widget.ViewPager2 android:id="@+id/homeViewPager" android:layout_width="match_parent" android:layout_height="0dp" android:clipChildren="false" android:clipToPadding="false" android:layout_marginTop="28dp" android:layout_marginBottom="0dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Нижняя панель действий режима редактирования (Обои, Виджеты, Настройки) -->
+        <LinearLayout android:id="@+id/glassEditModeBottomBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="26dp" android:layout_marginStart="20dp" android:layout_marginEnd="20dp" android:elevation="10dp" android:visibility="gone" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" tools:visibility="visible">
+
+            <LinearLayout android:id="@+id/layoutEditModeBottomBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:orientation="horizontal" android:paddingTop="12dp" android:paddingBottom="12dp">
+
+                <!-- Кнопка «Обои» -->
+                <LinearLayout android:id="@+id/btnEditWallpaper" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:clickable="true" android:focusable="true" android:gravity="center" android:orientation="vertical">
+
+                    <com.naua_morphix_launcher.app.views.LiquidGlassView android:id="@+id/glassWallpaper" android:layout_width="58dp" android:layout_height="58dp" app:lg_cornerRadius="29dp">
+                        <ImageView android:layout_width="58dp" android:layout_height="58dp" android:contentDescription="Обои" android:padding="15dp" android:src="@drawable/ic_wallpaper_xiaomi" />
+                    </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Обои" android:textColor="#E6FFFFFF" android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Кнопка «Виджеты» -->
+                <LinearLayout android:id="@+id/btnEditWidgets" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:clickable="true" android:focusable="true" android:gravity="center" android:orientation="vertical">
+
+                    <com.naua_morphix_launcher.app.views.LiquidGlassView android:id="@+id/glassWidgets" android:layout_width="58dp" android:layout_height="58dp" app:lg_cornerRadius="29dp">
+                        <ImageView android:layout_width="58dp" android:layout_height="58dp" android:contentDescription="Виджеты" android:padding="15dp" android:src="@drawable/ic_widgets_xiaomi" />
+                    </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:shadowColor="#80000000" android:shadowDx="1" android:shadowDy="1" android:shadowRadius="3" android:text="Виджеты" android:textColor="#E6FFFFFF" android:textSize="12sp" />
+                </LinearLayout>
+
+                <!-- Кнопка «Настройки» -->
+                <LinearLayout android:id="@+id/btnEditSettings" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:clickable="true" android:focusable="true" android:gravity="center" android:orientation="vertical">
+
+                    <com.naua_morphix_launcher.app.views.LiquidGlassView android:id="@+id/glassSettings" android:layout_width="58dp" android:layout_height="58dp" app:lg_cornerRadius="29dp">
+                        <ImageView android:layout_width="58dp" android:layout_height="58dp" android:contentDescription="Настройки" android:padding="15dp" android:src="@drawable/ic_settings_xiaomi" />
+                    </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:shadowColor="#80000000" android:shadowDx="1" android:shadowDy="1" android:shadowRadius="3" android:text="Настройки" android:textColor="#E6FFFFFF" android:textSize="12sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <com.naua_morphix_launcher.app.views.LiquidGlassView android:id="@+id/glassAppDrawer" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone" app:lg_overlayColor="@color/glass_tint_dark" app:lg_blurRadius="20.0" app:lg_cornerRadius="0dp">
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:paddingTop="48dp">
+
+            <!-- Поисковая строка "Жидкое стекло" -->
+            <LinearLayout android:id="@+id/searchContainer" android:layout_width="match_parent" android:layout_height="52dp" android:layout_marginStart="20dp" android:layout_marginEnd="20dp" android:layout_marginBottom="8dp" android:background="@drawable/glass_search_background" android:gravity="center_vertical" android:orientation="horizontal" android:paddingStart="16dp" android:paddingEnd="16dp">
+
+                <ImageView android:layout_width="22dp" android:layout_height="22dp" android:contentDescription="@null" android:src="@drawable/ic_search" app:tint="#B3FFFFFF" />
+
+                <EditText android:id="@+id/searchEditText" android:layout_width="0dp" android:layout_height="match_parent" android:layout_marginStart="12dp" android:layout_weight="1" android:background="@null" android:hint="@string/search_apps_hint" android:imeOptions="actionSearch" android:inputType="text" android:maxLines="1" android:textColor="#FFFFFF" android:textColorHint="#80FFFFFF" android:textSize="15sp" />
+            </LinearLayout>
+
+            <!-- Переключатель: Основное пространство / Второе пространство -->
+            <HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="20dp" android:layout_marginEnd="20dp" android:layout_marginBottom="8dp" android:scrollbars="none">
+
+                <com.google.android.material.chip.ChipGroup android:id="@+id/chipGroupSpace" android:layout_width="wrap_content" android:layout_height="wrap_content" app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip android:id="@+id/chipPrimarySpace" style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true" android:text="Моё пространство" />
+
+                    <com.google.android.material.chip.Chip android:id="@+id/chipSecondSpace" style="@style/Widget.Material3.Chip.Filter" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="2-е пространство" />
+                </com.google.android.material.chip.ChipGroup>
+            </HorizontalScrollView>
+
+            <!-- Кнопка поиска в Google/браузере, если приложение не найдено -->
+            <com.google.android.material.button.MaterialButton android:id="@+id/btnWebSearch" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:layout_marginBottom="12dp" android:text="Искать в Google" android:textColor="#FFFFFF" android:visibility="gone" app:cornerRadius="20dp" app:icon="@drawable/ic_search" app:iconTint="#FFFFFF" />
+
+            <!-- Сетка всех приложений -->
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/appsRecyclerView" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:overScrollMode="never" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingBottom="48dp" />
+
+        </LinearLayout>
+
+    </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+    <!-- Полноэкранное окно папки в стиле Xiaomi HyperOS -->
+    <include android:id="@+id/folderFullscreenOverlay" layout="@layout/dialog_folder_fullscreen" android:visibility="gone" />
+
+    <!-- Плавающая иконка при Drag & Drop перемещении по рабочему столу и между страницами -->
+    <FrameLayout android:id="@+id/dragOverlayContainer" android:layout_width="match_parent" android:layout_height="match_parent" android:visibility="gone">
+
+        <!-- Контур предвидения области посадки виджета на сетку -->
+        <View android:id="@+id/widgetDropTargetPreview" android:layout_width="100dp" android:layout_height="100dp" android:background="@drawable/bg_widget_drop_target" android:visibility="gone" />
+
+        <!-- Верхняя пилюля «Удалить» при зажатии/перемещении виджета -->
+        <LinearLayout android:id="@+id/layoutTopDeletePill" android:layout_width="wrap_content" android:layout_height="44dp" android:layout_gravity="top|center_horizontal" android:layout_marginTop="42dp" android:background="@drawable/bg_top_delete_pill" android:clickable="true" android:elevation="42dp" android:focusable="true" android:gravity="center" android:orientation="horizontal" android:paddingStart="22dp" android:paddingEnd="24dp" android:visibility="gone">
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="🗑️" android:textSize="17sp" />
+
+            <TextView android:id="@+id/tvTopDeleteText" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:text="Удалить" android:textColor="#FFFFFF" android:textSize="14.5sp" android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/floatingDragView" android:layout_width="76dp" android:layout_height="90dp" android:elevation="32dp" android:gravity="center_horizontal" android:orientation="vertical">
+
+            <FrameLayout android:layout_width="56dp" android:layout_height="56dp">
+
+                <com.google.android.material.imageview.ShapeableImageView android:id="@+id/ivFloatingDragIcon" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="centerCrop" />
+
+                <TextView
+                    android:id="@+id/tvDragBadgeCount"
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:layout_gravity="top|end"
+                    android:background="@drawable/bg_drag_badge"
+                    android:gravity="center"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    android:elevation="4dp" />
+            </FrameLayout>
+
+            <TextView android:id="@+id/tvFloatingDragLabel" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:ellipsize="end" android:gravity="center" android:maxLines="1" android:shadowColor="#80000000" android:shadowDx="1" android:shadowDy="1" android:shadowRadius="3" android:textColor="#FFFFFF" android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Плавающий виджет при Drag & Drop перемещении по рабочему столу и между страницами -->
+        <FrameLayout android:id="@+id/floatingWidgetDragView" android:layout_width="wrap_content" android:layout_height="wrap_content" android:elevation="36dp" android:visibility="gone">
+
+            <ImageView android:id="@+id/ivFloatingWidgetPreview" android:layout_width="wrap_content" android:layout_height="wrap_content" android:scaleType="fitCenter" />
+        </FrameLayout>
+    </FrameLayout>
+
+</FrameLayout>
+
+
+
+
+
+
+

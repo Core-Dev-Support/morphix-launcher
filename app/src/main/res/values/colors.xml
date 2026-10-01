@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Базовые цвета Material 3 (Tonal Palettes) -->
+    <color name="m3_primary">#6750A4</color>
+    <color name="m3_on_primary">#FFFFFF</color>
+    <color name="m3_primary_container">#EADDFF</color>
+    <color name="m3_on_primary_container">#21005D</color>
+
+    <color name="m3_surface">#FEF7FF</color>
+    <color name="m3_on_surface">#1D1B20</color>
+    <color name="m3_surface_variant">#E7E0EC</color>
+    <color name="m3_on_surface_variant">#49454F</color>
+
+    <!-- Цвета и полупрозрачности для Жидкого Стекла (Liquid Glass) -->
+    <!-- Полупрозрачная тонировка матового стекла (18% белого для светлой темы / 20% темного для темной) -->
+    <color name="glass_tint_light">#A6FFFFFF</color>
+    <color name="glass_tint_dark">#A6101014</color>
+
+    <!-- Световой блик на гранях стекла (градиентная кромка) -->
+    <color name="glass_border_highlight">#59FFFFFF</color>
+    <color name="glass_border_shadow">#14FFFFFF</color>
+
+    <!-- Тень под стеклом -->
+    <color name="glass_shadow">#1F000000</color>
+</resources>
+

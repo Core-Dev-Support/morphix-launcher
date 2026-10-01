@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+
+    <!-- Круглый фон с градиентом -->
+    <path android:pathData="M96,96m-84,0a84,84 0 1,0 168,0a84,84 0 1,0 -168,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:angle="135"
+                android:endColor="#1E1338"
+                android:startColor="#4A2885"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+
+    <!-- Стеклянный ободок -->
+    <path
+        android:pathData="M96,96m-82,0a82,82 0 1,0 164,0a82,82 0 1,0 -164,0"
+        android:strokeWidth="2"
+        android:strokeColor="#4DFFFFFF" />
+
+    <!-- Логотип Morphix -->
+    <path
+        android:fillColor="#EADDFF"
+        android:pathData="M60,136 L60,56 L82,56 L96,90 L110,56 L132,56 L132,136 L114,136 L114,88 L104,112 L88,112 L78,88 L78,136 Z" />
+</vector>

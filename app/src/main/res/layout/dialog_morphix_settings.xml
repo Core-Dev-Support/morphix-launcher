@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.naua_morphix_launcher.app.views.LiquidGlassView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/glassSettingsRoot" android:layout_width="match_parent" android:layout_height="match_parent" app:lg_cornerRadius="32dp" app:lg_overlayColor="#80121216" app:lg_fallbackColor="#E6121216">
+
+<androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:background="@android:color/transparent">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingTop="24dp" android:paddingBottom="40dp" android:paddingStart="16dp" android:paddingEnd="16dp">
+
+        <RelativeLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="24dp">
+
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:layout_alignParentStart="true">
+
+                <FrameLayout android:id="@+id/btnBack" android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_card">
+                    <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:src="@drawable/ic_chevron_left" />
+                </FrameLayout>
+
+            <LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginStart="16dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Настройки" android:textColor="#FFFFFF" android:textSize="20sp" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Morphix Launcher" android:textSize="12sp" android:textColor="#B3FFFFFF" />
+            </LinearLayout>
+            </LinearLayout>
+
+        </RelativeLayout>
+
+        <!-- Оформление -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Оформление" android:textColor="#E6FFFFFF" android:textSize="13sp" android:textStyle="bold" android:layout_marginBottom="8dp" android:layout_marginStart="8dp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/bg_settings_card" android:layout_marginBottom="20dp">
+
+            <!-- Жидкое стекло -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+                
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="💧" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Жидкое стекло" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Эффект размытия" android:textColor="#E6FFFFFF" android:textSize="12sp" />
+                </LinearLayout>
+
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchGlass" android:layout_width="wrap_content" android:layout_height="wrap_content" android:theme="@style/Widget.Material3.CompoundButton.Switch" />
+            </LinearLayout>
+
+
+        </LinearLayout>
+
+        <!-- Рабочий стол -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Рабочий стол" android:textColor="#E6FFFFFF" android:textSize="13sp" android:textStyle="bold" android:layout_marginBottom="8dp" android:layout_marginStart="8dp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/bg_settings_card" android:layout_marginBottom="20dp">
+
+            <!-- Режим -->
+            <LinearLayout android:id="@+id/btnExpandLayoutMode" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="📱" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Стиль рабочего стола" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/labelLayoutModeStatus" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Классический" android:textColor="#E6FFFFFF" android:textSize="12sp" />
+                </LinearLayout>
+
+                <ImageView android:id="@+id/iconExpandLayoutMode" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_chevron_right" />
+            </LinearLayout>
+            
+            <LinearLayout android:id="@+id/layoutLayoutModeOptions" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="66dp" android:paddingEnd="14dp" android:paddingBottom="14dp" android:visibility="gone">
+                <RadioGroup android:id="@+id/radioGroupLayoutMode" android:layout_width="match_parent" android:layout_height="wrap_content">
+                    <RadioButton android:id="@+id/radioModeClassic" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Классический" android:textColor="#E6FFFFFF" android:buttonTint="@color/m3_primary" />
+                    <RadioButton android:id="@+id/radioModeDrawer" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Меню приложений" android:textColor="#E6FFFFFF" android:buttonTint="@color/m3_primary" />
+                </RadioGroup>
+            </LinearLayout>
+            
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
+
+            <!-- Сетка -->
+            <LinearLayout android:id="@+id/btnExpandGrid" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="📐" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Все приложения" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/labelGridStatus" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="10 x 10" android:textColor="#E6FFFFFF" android:textSize="12sp" />
+                </LinearLayout>
+
+                <ImageView android:id="@+id/iconExpandGrid" android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_chevron_right" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/layoutGridSliders" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="14dp" android:paddingEnd="14dp" android:paddingBottom="14dp" android:visibility="gone">
+                <TextView android:id="@+id/labelGridColumns" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Колонок: 4" android:textColor="#FFFFFF" android:textSize="14sp" android:layout_marginStart="52dp" />
+                <com.google.android.material.slider.Slider android:id="@+id/sliderGridColumns" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="44dp" android:stepSize="1.0" android:value="4.0" android:valueFrom="3.0" android:valueTo="10.0" />
+                <TextView android:id="@+id/labelGridRows" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Рядов: 6" android:textColor="#FFFFFF" android:textSize="14sp" android:layout_marginStart="52dp" />
+                <com.google.android.material.slider.Slider android:id="@+id/sliderGridRows" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="44dp" android:stepSize="1.0" android:value="6.0" android:valueFrom="4.0" android:valueTo="10.0" />
+            </LinearLayout>
+            
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
+            
+            <!-- Плавные анимации -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="🌬️" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Плавные анимации" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchSmoothAnimations" android:layout_width="wrap_content" android:layout_height="wrap_content" android:theme="@style/Widget.Material3.CompoundButton.Switch" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Значки -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Значки" android:textColor="#E6FFFFFF" android:textSize="13sp" android:textStyle="bold" android:layout_marginBottom="8dp" android:layout_marginStart="8dp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/bg_settings_card" android:layout_marginBottom="20dp">
+
+            <!-- Подписи -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="T" android:gravity="center" android:textColor="#21005D" android:textStyle="bold" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Показывать подписи" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchLabels" android:layout_width="wrap_content" android:layout_height="wrap_content" android:theme="@style/Widget.Material3.CompoundButton.Switch" />
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
+
+            <!-- Форма (Opens dialog) -->
+            <LinearLayout android:id="@+id/btnOpenShapeDialog" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="🎨" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Все приложения" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/labelShapeStatus" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Squircle" android:textColor="#E6FFFFFF" android:textSize="12sp" />
+                </LinearLayout>
+
+                <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_chevron_right" />
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
+
+            <!-- Размер -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="14dp" android:paddingEnd="14dp" android:paddingBottom="14dp" android:paddingTop="14dp">
+
+                <TextView android:id="@+id/labelIconScale" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Размер значков: 100%" android:textColor="#FFFFFF" android:textSize="14sp" android:layout_marginStart="52dp" />
+
+                <com.google.android.material.slider.Slider android:id="@+id/sliderIconScale" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginStart="44dp" android:stepSize="5.0" android:value="100.0" android:valueFrom="80.0" android:valueTo="130.0" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Жесты -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Жесты" android:textColor="#E6FFFFFF" android:textSize="13sp" android:textStyle="bold" android:layout_marginBottom="8dp" android:layout_marginStart="8dp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/bg_settings_card" android:layout_marginBottom="20dp">
+
+            <!-- Двойное касание -->
+            <LinearLayout android:id="@+id/btnOpenLockScreenDialog" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="🔒" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Блокировка экрана" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+                    <TextView android:id="@+id/labelLockScreenStatus" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="2 мин" android:textColor="#E6FFFFFF" android:textSize="12sp" />
+                </LinearLayout>
+
+                <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_chevron_right" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Система -->
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Система и безопасность" android:textColor="#E6FFFFFF" android:textSize="13sp" android:textStyle="bold" android:layout_marginBottom="8dp" android:layout_marginStart="8dp" />
+
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@drawable/bg_settings_card" android:layout_marginBottom="24dp">
+
+            <!-- Второе пространство -->
+            <LinearLayout android:id="@+id/btnOpenSecondSpaceDialog" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="👥" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Второе пространство" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_chevron_right" />
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
+            
+            <!-- Разрешения -->
+            <LinearLayout android:id="@+id/btnOpenPermissionsDialog" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="🛡️" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Разрешения" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_chevron_right" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnSaveSettings" android:layout_width="match_parent" android:layout_height="54dp" android:backgroundTint="@color/m3_primary" android:text="Сохранить и выйти" android:textColor="#FFFFFF" android:textSize="16sp" app:cornerRadius="27dp" />
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>
+</com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+
+
+
+

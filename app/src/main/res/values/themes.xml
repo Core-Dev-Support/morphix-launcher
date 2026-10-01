@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Основная тема лаунчера с показом системных обоев и прозрачностью под стекло -->
+    <style name="Theme.Morphix.Transparent" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Показ системных обоев под окном лаунчера -->
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">false</item>
+
+        <!-- Прозрачные системные панели (Status Bar и Navigation Bar без белых полос) -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Material3.BottomSheetDialog</item>
+    </style>
+
+    <!-- Стиль скругления иконок Material 3 (Squircle) -->
+    <style name="ShapeAppearance.Morphix.AppIcon" parent="">
+        <item name="cornerSize">28%</item>
+        <item name="cornerFamily">rounded</item>
+    </style>
+</resources>

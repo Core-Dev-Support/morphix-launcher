@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+
+    <!-- Фоновый градиентный сквиркл в стиле Material 3 / Glassmorphism -->
+    <path android:pathData="M32,16 h128 a32,32 0 0 1 32,32 v96 a32,32 0 0 1 -32,32 h-128 a32,32 0 0 1 -32,-32 v-96 a32,32 0 0 1 32,-32 z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:angle="135"
+                android:endColor="#1E1338"
+                android:startColor="#4A2885"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+
+    <!-- Стеклянный полупрозрачный контур (блик света) -->
+    <path
+        android:pathData="M32,18 h128 a30,30 0 0 1 30,30 v96 a30,30 0 0 1 -30,30 h-128 a30,30 0 0 1 -30,-30 v-96 a30,30 0 0 1 30,-30 z"
+        android:strokeWidth="2"
+        android:strokeColor="#4DFFFFFF" />
+
+    <!-- Неоновый логотип Morphix (Буква M из жидкого кристалла) -->
+    <path
+        android:fillColor="#EADDFF"
+        android:pathData="M60,136 L60,56 L82,56 L96,90 L110,56 L132,56 L132,136 L114,136 L114,88 L104,112 L88,112 L78,88 L78,136 Z" />
+
+    <!-- Блик на левом крыле -->
+    <path
+        android:fillColor="#59FFFFFF"
+        android:pathData="M60,56 L82,56 L96,90 L88,112 L78,88 L60,136 Z" />
+</vector>

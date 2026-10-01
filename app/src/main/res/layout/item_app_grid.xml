@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:clickable="true"
+    android:focusable="true"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:paddingStart="2dp"
+    android:paddingTop="2dp"
+    android:paddingEnd="2dp"
+    android:paddingBottom="2dp">
+
+    <!-- Контейнер иконки с поддержкой бейджика Второго пространства -->
+    <FrameLayout
+        android:id="@+id/iconContainer"
+        android:layout_width="56dp"
+        android:layout_height="56dp">
+
+        <!-- Подсветка при наведении для создания папки -->
+        <View
+            android:id="@+id/folderDropHighlight"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_folder_drop_target"
+            android:visibility="gone" />
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/appIcon"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            tools:src="@drawable/ic_launcher" />
+
+        <!-- Превью папки (2х2 мини-иконки внутри стеклянного сквиркла) -->
+        <com.naua_morphix_launcher.app.views.LiquidGlassView
+            android:id="@+id/layoutFolderPreview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:lg_cornerRadius="16dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:padding="6dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/folderMiniIcon1"
+                    android:layout_width="19dp"
+                    android:layout_height="19dp"
+                    android:layout_margin="1.5dp"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Morphix.AppIcon" />
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/folderMiniIcon2"
+                    android:layout_width="19dp"
+                    android:layout_height="19dp"
+                    android:layout_margin="1.5dp"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Morphix.AppIcon" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/folderMiniIcon3"
+                    android:layout_width="19dp"
+                    android:layout_height="19dp"
+                    android:layout_margin="1.5dp"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Morphix.AppIcon" />
+
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/folderMiniIcon4"
+                    android:layout_width="19dp"
+                    android:layout_height="19dp"
+                    android:layout_margin="1.5dp"
+                    android:scaleType="centerCrop"
+                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Morphix.AppIcon" />
+            </LinearLayout>
+        </LinearLayout>
+        </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+        <ImageView
+            android:id="@+id/cloneBadge"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="bottom|end"
+            android:contentDescription="Второе пространство"
+            android:src="@drawable/ic_clone_badge"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <!-- Индикатор / бейдж непрочитанных уведомлений -->
+        <TextView
+            android:id="@+id/notificationBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="18dp"
+            android:minHeight="18dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="-2dp"
+            android:layout_marginEnd="-2dp"
+            android:background="@drawable/badge_circle"
+            android:gravity="center"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:textColor="#FFFFFF"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            tools:text="3"
+            tools:visibility="visible" />
+
+        <!-- Круглый маркер выбора в режиме редактирования (Xiaomi Edit Mode) -->
+        <ImageView
+            android:id="@+id/ivSelectCircle"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="-1dp"
+            android:layout_marginEnd="-1dp"
+            android:src="@drawable/ic_edit_circle_unselected"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+    </FrameLayout>
+
+    <!-- Название приложения с контрастной тенью под любой фон -->
+    <TextView
+        android:id="@+id/appLabel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="1"
+        android:includeFontPadding="false"
+        android:shadowColor="#80000000"
+        android:shadowDx="1"
+        android:shadowDy="1"
+        android:shadowRadius="3"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp"
+        tools:text="Приложение" />
+
+    <!-- Увеличенная папка в стиле Xiaomi HyperOS (2x2 / XXL) -->
+    <com.naua_morphix_launcher.app.views.LiquidGlassView
+        android:id="@+id/layoutEnlargedFolder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_margin="4dp"
+        app:lg_cornerRadius="24dp"
+        app:lg_overlayColor="#33FFFFFF"
+        app:lg_fallbackColor="#FF2A2A2E"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <!-- Top Row: App 1 and App 2 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/enlargedApp1"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/ivEnlargedIcon1"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:scaleType="centerCrop" />
+
+                    <TextView
+                        android:id="@+id/tvEnlargedLabel1"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:gravity="center"
+                        android:maxLines="1"
+                        android:shadowColor="#80000000"
+                        android:shadowDx="1"
+                        android:shadowDy="1"
+                        android:shadowRadius="2"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/enlargedApp2"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/ivEnlargedIcon2"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:scaleType="centerCrop" />
+
+                    <TextView
+                        android:id="@+id/tvEnlargedLabel2"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:gravity="center"
+                        android:maxLines="1"
+                        android:shadowColor="#80000000"
+                        android:shadowDx="1"
+                        android:shadowDy="1"
+                        android:shadowRadius="2"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Bottom Row: App 3 and Quadrant (Open folder) -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/enlargedApp3"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <com.google.android.material.imageview.ShapeableImageView
+                        android:id="@+id/ivEnlargedIcon3"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:scaleType="centerCrop" />
+
+                    <TextView
+                        android:id="@+id/tvEnlargedLabel3"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:gravity="center"
+                        android:maxLines="1"
+                        android:shadowColor="#80000000"
+                        android:shadowDx="1"
+                        android:shadowDy="1"
+                        android:shadowRadius="2"
+                        android:textColor="#FFFFFF"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/enlargedQuadrant"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <com.naua_morphix_launcher.app.views.LiquidGlassView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        app:lg_cornerRadius="12dp"
+                        app:lg_overlayColor="#4DFFFFFF"
+                        app:lg_fallbackColor="#40FFFFFF">
+
+                        <GridLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:columnCount="2"
+                            android:rowCount="2"
+                            android:padding="3dp">
+
+                            <ImageView
+                                android:id="@+id/ivEnlargedMini1"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_margin="0.5dp"
+                                android:scaleType="centerCrop" />
+
+                            <ImageView
+                                android:id="@+id/ivEnlargedMini2"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_margin="0.5dp"
+                                android:scaleType="centerCrop" />
+
+                            <ImageView
+                                android:id="@+id/ivEnlargedMini3"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_margin="0.5dp"
+                                android:scaleType="centerCrop" />
+
+                            <ImageView
+                                android:id="@+id/ivEnlargedMini4"
+                                android:layout_width="16dp"
+                                android:layout_height="16dp"
+                                android:layout_margin="0.5dp"
+                                android:scaleType="centerCrop" />
+
+                        </GridLayout>
+
+                    </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+                    <TextView
+                        android:id="@+id/tvEnlargedFolderTitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:ellipsize="end"
+                        android:gravity="center"
+                        android:maxLines="1"
+                        android:shadowColor="#80000000"
+                        android:shadowDx="1"
+                        android:shadowDy="1"
+                        android:shadowRadius="2"
+                        android:textColor="#B3FFFFFF"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/ivEnlargedSelectCircle"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="top|end"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="4dp"
+            android:src="@drawable/ic_edit_circle_unselected"
+            android:visibility="gone" />
+
+    </com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+</LinearLayout>
+
+
+

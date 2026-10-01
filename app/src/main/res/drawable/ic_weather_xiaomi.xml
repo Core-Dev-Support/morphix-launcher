@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    <!-- Желтое солнце -->
+    <path
+        android:fillColor="#FFB300"
+        android:pathData="M23,15m-7,0a7,7 0 1,0 14,0a7,7 0 1,0 -14,0" />
+    <!-- Белое облако перед солнцем -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M25.35,21.04C24.67,17.59 21.64,15 18,15c-2.89,0 -5.4,1.64 -6.65,4.04C8.34,19.36 6,21.91 6,25c0,3.31 2.69,6 6,6h13.35c2.76,0 5,-2.24 5,-5 0,-2.64 -2.05,-4.78 -5,-4.96z"/>
+</vector>

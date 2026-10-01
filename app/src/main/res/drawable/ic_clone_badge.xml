@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="16dp"
+    android:viewportWidth="16"
+    android:viewportHeight="16">
+    <!-- Фон бейджика клона -->
+    <path
+        android:fillColor="#FF6200EE"
+        android:pathData="M8,8m-7,0a7,7 0 1,0 14,0a7,7 0 1,0 -14,0" />
+    <path
+        android:strokeWidth="0.8"
+        android:strokeColor="#FFFFFFFF"
+        android:pathData="M8,8m-7,0a7,7 0 1,0 14,0a7,7 0 1,0 -14,0" />
+    <!-- Значок двух пользователей/клона -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M6,7a2,2 0 1,0 0,-4 2,2 0 0,0 0,4zM6,8c-1.5,0 -4,0.8 -4,2.3V12h8v-1.7C10,8.8 7.5,8 6,8zM10.5,7a1.5,1.5 0 1,0 0,-3 1.5,1.5 0 0,0 0,3zM10.5,8c-0.2,0 -0.4,0 -0.7,0.1 0.7,0.5 1.2,1.2 1.2,2.2v1.7h3v-1.7C14,8.8 12,8 10.5,8z"/>
+</vector>

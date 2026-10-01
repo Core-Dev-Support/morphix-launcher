@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.naua_morphix_launcher.app.views.LiquidGlassView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/glassSettingsRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:lg_cornerRadius="32dp" app:lg_overlayColor="#80121216" app:lg_fallbackColor="#E6121216">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Форма значка"
+        android:textColor="#FFFFFF"
+       
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+       
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:orientation="vertical">
+
+        <RadioGroup
+            android:id="@+id/radioGroupShape"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            
+            <RadioButton
+                android:id="@+id/radioSquircle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Squircle"
+                android:textColor="#FFFFFF"
+                />
+                
+            <RadioButton
+                android:id="@+id/radioCircle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Circle"
+                android:textColor="#FFFFFF"
+                />
+                
+            <RadioButton
+                android:id="@+id/radioRoundedSquare"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Rounded Square"
+                android:textColor="#FFFFFF"
+                />
+                
+            <RadioButton
+                android:id="@+id/radioTeardrop"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Teardrop"
+                android:textColor="#FFFFFF"
+                />
+                
+            <RadioButton
+                android:id="@+id/radioOriginal"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Original"
+                android:textColor="#FFFFFF"
+                />
+                
+        </RadioGroup>
+    </LinearLayout>
+
+</LinearLayout>
+</com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+

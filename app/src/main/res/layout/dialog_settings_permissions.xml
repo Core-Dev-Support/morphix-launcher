@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.naua_morphix_launcher.app.views.LiquidGlassView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/glassSettingsRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:lg_cornerRadius="32dp" app:lg_overlayColor="#80121216" app:lg_fallbackColor="#E6121216">
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Разрешения"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
+
+    <LinearLayout
+        android:id="@+id/btnDefaultLauncher"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_settings_card"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/bg_settings_icon"
+            android:gravity="center"
+            android:text="👑"
+            android:textSize="18sp" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Сделать основным"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/labelDefaultStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Не выдано"
+                android:textColor="#B3261E"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>
+</com.naua_morphix_launcher.app.views.LiquidGlassView>
+
+

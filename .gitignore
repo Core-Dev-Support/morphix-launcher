@@ -1,0 +1,73 @@
+# Gradle
+.gradle/
+build/
+*/build/
+local.properties
+gradle-app.setting
+!gradle/wrapper/gradle-wrapper.jar
+
+# Android / Studio / IntelliJ
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+captures/
+.externalNativeBuild/
+.cxx/
+release/
+
+# Signing
+*.jks
+*.keystore
+keystore.properties
+google-services.json
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+.navigation/
+misc.xml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs / temp
+*.log
+*.tmp
+*.bak
+local.properties.backup
+
+# --- Root-level one-off dev scripts and backups (kept locally, not in repo) ---
+/fix*.cs
+/fix*.exe
+/fix*.py
+/fix*.ps1
+/check_*.cs
+/check_*.exe
+/clean_backup*.cs
+/clean_backup*.exe
+/show_move*.cs
+/show_move*.exe
+/get_backup.cs
+/get_backup.exe
+/update_subdialogs.py
+/wrap_blur.py
+/wrap_blur.ps1
+/remove_bom.py
+/remove_bom.ps1
+/remove_tags.ps1
+/remove_trans.ps1
+/inject_*.ps1
+/test_xml.ps1
+/scratch.txt
+/drag_move.txt
+/new_drag.kt
+/MainActivity_backup.kt
+/MainActivity_clean.kt
+/UTF8
+/setup_sdk.bat
