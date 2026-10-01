@@ -163,7 +163,7 @@ class DesktopPagerAdapter(
 
     override fun onBindViewHolder(holder: PageViewHolder, position: Int) {
         activeHolders.add(holder)
-        holder.pageAdapter.isEditMode = isEditMode
+        holder.pageAdapter.setEditMode(isEditMode, selectedApps)
         holder.bind(pages.getOrElse(position) { emptyList() }, position)
     }
 

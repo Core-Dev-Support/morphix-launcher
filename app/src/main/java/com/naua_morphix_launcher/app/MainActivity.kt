@@ -292,7 +292,8 @@ class MainActivity : AppCompatActivity() {
         // кэш host-view виджетов переживал Activity и удерживал целое дерево RemoteViews
         widgetViewCache.keys.toList().forEach { id ->
             try {
-                appWidgetManager.getAppWidgetInfo(id)?.let { appWidgetHost.destroyView(id) }
+                (widgetViewCache.remove(id) as? android.appwidget.AppWidgetHostView)
+                    ?.let { (it.parent as? ViewGroup)?.removeView(it) }
             } catch (e: Exception) {
                 e.printStackTrace()
             }

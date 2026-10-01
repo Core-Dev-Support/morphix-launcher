@@ -24,15 +24,13 @@ object ThemeUtils {
 
     private fun backgroundFor(view: View, resId: Int): Drawable {
         val proto = drawableProtos.getOrPut(resId) {
-            requireNonNull(AppCompatResources.getDrawable(view.context, resId))
+            AppCompatResources.getDrawable(view.context, resId)
+                ?: error("Drawable not found for resource $resId")
         }
         // newDrawable().mutate() — иначе все view разделяли бы один Drawable
         // и его состояние (например, bounds) лазило бы между ними.
-        return requireNonNull(proto.constantState).newDrawable(view.resources).mutate()
+        return proto.constantState?.newDrawable(view.resources)?.mutate() ?: proto
     }
-
-    private inline fun requireNonNull(value: Drawable?): Drawable =
-        value ?: error("Drawable not found for resource")
 
     /**
      * Рекурсивно применяет тему (Glass / Material3) ко всем элементам view-дерева.

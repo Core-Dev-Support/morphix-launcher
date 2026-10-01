@@ -1,4 +1,4 @@
-package com.naua_morphix_launcher.app.ui
+﻿package com.naua_morphix_launcher.app.ui
 
 import android.view.LayoutInflater
 import android.view.View
@@ -31,20 +31,6 @@ class AppsAdapter(
     private val onAppClickWithView: ((AppItem, View) -> Unit)? = null,
     private val onSelectToggle: ((AppItem) -> Unit)? = null
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
-
-    companion object {
-        const val PAYLOAD_EDIT_MODE = "EDIT_MODE"
-        const val PAYLOAD_DRAG_STATE = "DRAG_STATE"
-        const val PAYLOAD_BADGE = "BADGE"
-        const val PAYLOAD_CONFIG = "CONFIG"
-
-        /** Один Handler на адаптер. Раньше создавался новый Handler на каждый bind. */
-        private val TOUCH_HANDLER = Handler(Looper.getMainLooper())
-
-        /** ShapeAppearanceModel кэшируется: 4 значения enum, а пересборка формы
-         *  заставляла Material пересоздавать маску Path при отрисовке. */
-        private val shapeModelCache = java.util.concurrent.ConcurrentHashMap<IconShape, ShapeAppearanceModel>()
-    }
 
     private val items = ArrayList<AppItem>()
     private var iconShape: IconShape = IconShape.SQUIRCLE
@@ -320,7 +306,10 @@ class AppsAdapter(
             }
         }
         if (payloads.contains(PAYLOAD_DRAG_STATE)) {
-            holder.applyDragAlpha(item)
+            when (holder) {
+                is AppViewHolder -> holder.applyDragAlpha(item)
+                is WidgetViewHolder -> holder.applyDragAlpha(item)
+            }
         }
         if (payloads.contains(PAYLOAD_BADGE)) {
             if (holder is AppViewHolder) {
@@ -912,6 +901,13 @@ class AppsAdapter(
         private var widgetDownRawX = 0f
         private var widgetDownRawY = 0f
 
+        fun applyDragAlpha(item: AppItem) {
+            val draggedKey = draggedItemKey
+            val isDragged = draggedKey != null && identityOf(item) == draggedKey
+            val target = if (isDragged) 0f else 1f
+            if (binding.root.alpha != target) binding.root.alpha = target
+        }
+
         /**
          * Снимает ссылку на переработанный холдер. Замыкание onWidgetLongClick
          * удерживало binding целиком, а сам hostView живёт в кэше активности —
@@ -1040,6 +1036,18 @@ class AppsAdapter(
     companion object {
         const val VIEW_TYPE_APP = 0
         const val VIEW_TYPE_WIDGET = 1
+
+        const val PAYLOAD_EDIT_MODE = "EDIT_MODE"
+        const val PAYLOAD_DRAG_STATE = "DRAG_STATE"
+        const val PAYLOAD_BADGE = "BADGE"
+        const val PAYLOAD_CONFIG = "CONFIG"
+
+        /** Один Handler на адаптер. Раньше создавался новый Handler на каждый bind. */
+        private val TOUCH_HANDLER = Handler(Looper.getMainLooper())
+
+        /** ShapeAppearanceModel кэшируется: 4 значения enum, а пересборка формы
+         *  заставляла Material пересоздавать маску Path при отрисовке. */
+        private val shapeModelCache = java.util.concurrent.ConcurrentHashMap<IconShape, ShapeAppearanceModel>()
 
         /**
          * Кэшированные ShapeAppearanceModel: 4 значения enum, а пересборка

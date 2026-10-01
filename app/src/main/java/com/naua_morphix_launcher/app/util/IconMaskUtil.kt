@@ -53,7 +53,7 @@ object IconMaskUtil {
         canvas.translate((targetPx - bw) / 2f, (targetPx - bh) / 2f)
         // setBounds на общем Drawable из кэша AppLoader «съезжал» бы
         // у всех остальных пользователей иконки, поэтому рисуем копию
-        val safe = drawable.constantState?.newDrawable(drawable.resources)?.mutate() ?: drawable
+        val safe = drawable.constantState?.newDrawable()?.mutate() ?: drawable
         safe.setBounds(0, 0, w, h)
         canvas.scale(scale, scale)
         safe.draw(canvas)
