@@ -117,6 +117,32 @@
                 <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchLabels" android:layout_width="wrap_content" android:layout_height="wrap_content" android:theme="@style/Widget.Material3.CompoundButton.Switch" />
             </LinearLayout>
 
+            <!-- Док: переключатель и количество иконок -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="D" android:gravity="center" android:textColor="#21005D" android:textStyle="bold" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Док быстрого доступа" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchDock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:theme="@style/Widget.Material3.CompoundButton.Switch" />
+            </LinearLayout>
+
+            <LinearLayout android:id="@+id/layoutDockOptions" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="14dp" android:paddingEnd="14dp" android:paddingBottom="14dp">
+
+                <TextView android:id="@+id/labelDockIconCount" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Иконок в доке: 5" android:textColor="#CCFFFFFF" android:textSize="13sp" />
+
+                <com.google.android.material.slider.Slider android:id="@+id/sliderDockIconCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:stepSize="1" android:valueFrom="0" android:valueTo="7" />
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="4dp" android:text="Стиль дока" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <RadioGroup android:id="@+id/radioGroupDockStyle" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+
+                    <RadioButton android:id="@+id/radioDockFloating" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Капсула" android:textColor="#FFFFFF" />
+
+                    <RadioButton android:id="@+id/radioDockFullWidth" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Во всю ширину" android:textColor="#FFFFFF" />
+                </RadioGroup>
+            </LinearLayout>
+
             <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
 
             <!-- Форма (Opens dialog) -->

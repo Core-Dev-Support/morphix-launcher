@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Плавающая стеклянная капсула дока в стиле MIUI/HyperOS -->
+<com.naua_morphix_launcher.app.views.LiquidGlassView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/dockCapsule"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:elevation="14dp"
+    android:visibility="gone"
+    app:lg_cornerRadius="34dp"
+    app:lg_fallbackColor="#66101014"
+    app:lg_overlayColor="#40FFFFFF"
+    tools:visibility="visible"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/dockRecyclerView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:clipToPadding="false"
+        android:orientation="horizontal"
+        android:overScrollMode="never"
+        android:paddingStart="8dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="6dp" />
+
+</com.naua_morphix_launcher.app.views.LiquidGlassView>

@@ -1,4 +1,4 @@
-package com.naua_morphix_launcher.app.ui
+﻿package com.naua_morphix_launcher.app.ui
 
 import android.app.AlertDialog
 import android.content.Context
@@ -10,6 +10,7 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.naua_morphix_launcher.app.R
 import com.naua_morphix_launcher.app.databinding.DialogMorphixSettingsBinding
+import com.naua_morphix_launcher.app.model.DockStyle
 import com.naua_morphix_launcher.app.model.IconShape
 import com.naua_morphix_launcher.app.model.LauncherSettings
 import com.naua_morphix_launcher.app.model.LayoutMode
@@ -197,6 +198,27 @@ class SettingsDialog(
             }
         }
 
+        // Док
+        binding.switchDock.isChecked = settings.isDockEnabled
+        binding.radioDockFloating.isChecked = settings.dockStyle != DockStyle.FULL_WIDTH
+        binding.radioDockFullWidth.isChecked = settings.dockStyle == DockStyle.FULL_WIDTH
+        try {
+            binding.sliderDockIconCount.value = settings.dockIconCount.coerceIn(0, 7).toFloat()
+        } catch (e: IllegalStateException) {
+            // значение вне диапазона слайдера — оставляем дефолт
+            binding.sliderDockIconCount.value = 5f
+        }
+        binding.labelDockIconCount.text = "Иконок в доке: ${binding.sliderDockIconCount.value.toInt()}"
+        binding.sliderDockIconCount.addOnChangeListener { _, value, _ ->
+            binding.labelDockIconCount.text = "Иконок в доке: ${value.toInt()}"
+        }
+        binding.switchDock.setOnCheckedChangeListener { _, isChecked ->
+            binding.layoutDockOptions.visibility =
+                if (isChecked) android.view.View.VISIBLE else android.view.View.GONE
+        }
+        binding.layoutDockOptions.visibility =
+            if (settings.isDockEnabled) android.view.View.VISIBLE else android.view.View.GONE
+
         // Жесты
         binding.labelLockScreenStatus.text = "${settings.tapsToLockCount} тапа"
         binding.btnOpenLockScreenDialog.setOnClickListener {
@@ -275,6 +297,12 @@ class SettingsDialog(
             LayoutMode.DRAWER
         }
 
+        val selectedDockStyle = if (binding.radioDockFullWidth.isChecked) {
+            DockStyle.FULL_WIDTH
+        } else {
+            DockStyle.FLOATING
+        }
+
         return settings.copy(
             isGlassEnabled = binding.switchGlass.isChecked,
             blurRadius = 12f,
@@ -283,6 +311,9 @@ class SettingsDialog(
             layoutMode = selectedLayoutMode,
             gridColumns = binding.sliderGridColumns.value.toInt(),
             gridRows = binding.sliderGridRows.value.toInt(),
+            isDockEnabled = binding.switchDock.isChecked,
+            dockStyle = selectedDockStyle,
+            dockIconCount = binding.sliderDockIconCount.value.toInt(),
             smoothAnimations = binding.switchSmoothAnimations.isChecked
         )
     }

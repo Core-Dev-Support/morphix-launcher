@@ -73,6 +73,7 @@ import com.naua_morphix_launcher.app.service.MorphixAccessibilityService
 import com.naua_morphix_launcher.app.service.MorphixNotificationListenerService
 import com.naua_morphix_launcher.app.ui.AppsAdapter
 import com.naua_morphix_launcher.app.ui.DesktopPagerAdapter
+import com.naua_morphix_launcher.app.ui.DockAdapter
 import com.naua_morphix_launcher.app.ui.WidgetsAdapter
 import com.naua_morphix_launcher.app.ui.SettingsDialog
 import com.naua_morphix_launcher.app.views.LiquidGlassView
@@ -122,6 +123,147 @@ class MainActivity : AppCompatActivity() {
     private var isBlurInitialized = false
     private var lowEndDeviceCache: Boolean? = null
 
+    // ===== Док (плавающая капсула быстрого доступа) =====
+    private lateinit var dockController: DockController
+    private val dockAdapter get() = dockController.adapter
+
+    /** Иконка вытащена из дока, а не из сетки — влияет на завершение drag. */
+    private var isDraggingFromDock = false
+
+    /** Курсор над доком во время перетаскивания — док подсвечен. */
+    private var isHoveringDock = false
+
+    /** Док принимает иконку: обычное приложение, есть свободный слот. */
+    private fun dockAcceptsDrop(): Boolean {
+        if (!::dockController.isInitialized || !dockController.isDockVisible()) return false
+        val item = activeDraggedItem ?: return false
+        if (item.isFolder || item.isWidget || item.isEmpty) return false
+        // иконку, уже лежащую в доке, повторно туда класть нечего
+        return dockController.items().none { it.packageName == item.packageName }
+    }
+
+    private fun setDockDropHighlight(active: Boolean) {
+        val capsule = binding.dockContainer.root
+        if (!currentSettings.smoothAnimations) {
+            capsule.scaleX = if (active) 1.06f else 1.0f
+            capsule.scaleY = if (active) 1.06f else 1.0f
+            return
+        }
+        capsule.animate().cancel()
+        if (active) {
+            capsule.animate().scaleX(1.06f).scaleY(1.06f).setDuration(140).start()
+        } else {
+            capsule.animate().scaleX(1.0f).scaleY(1.0f).setDuration(140).start()
+        }
+    }
+
+    /**
+     * Итог перетаскивания над доком: кладём иконку в док и убираем её из сетки.
+     * true — дроп обработан здесь, дальше обычная логика сетки не нужна.
+     */
+    private fun handleDropOnDock(): Boolean {
+        val item = activeDraggedItem ?: return false
+        if (!dockController.addPackage(item.packageName, currentSettings.dockIconCount)) return false
+
+        // убираем из сетки рабочего стола, если там была
+        if (!isDraggingFromDock) {
+            val ordered = prefsManager.getHomeScreenOrderedPackages(currentSpace).toMutableList()
+            val idx = ordered.indexOf(item.packageName)
+            if (idx != -1) {
+                ordered[idx] = ""
+                prefsManager.setHomeScreenOrderedPackages(currentSpace, ordered)
+            }
+        } else {
+            dockController.removePackage(item.packageName)
+        }
+
+        refreshDock()
+        updateHomeScreenApps()
+        setDockDropHighlight(false)
+        isHoveringDock = false
+        binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        return true
+    }
+
+    private fun setupDock() {
+        dockController = DockController(
+            binding = binding,
+            prefsManager = prefsManager,
+            launchApp = { item, view ->
+                AppLoader.launchApp(this, item, view, smoothAnimations = currentSettings.smoothAnimations)
+            },
+            onLongPressItem = { item, view ->
+                if (isEditMode) {
+                    showAppQuickActionsPopup(item, view, isFromHomeScreen = true)
+                } else {
+                    showAppQuickActionsPopup(item, view, isFromHomeScreen = true)
+                }
+            },
+            onStartDragFromDock = { item, view, x, y ->
+                startDesktopDrag(item, view, x, y, fromDock = true)
+            }
+        )
+    }
+
+    private fun refreshDock() {
+        if (!::dockController.isInitialized) return
+        dockController.refresh(allApps, currentSettings.hiddenPackages, currentSettings)
+        updateDockSpacing()
+    }
+
+    /**
+     * Док перекрывает нижний ряд иконок, поэтому поднимаем рабочий стол
+     * на высоту капсулы. Без этого нижние иконки оказывались под доком.
+     */
+    private fun updateDockSpacing() {
+        val dock = binding.dockContainer.root
+        val pagerLp = binding.homeViewPager.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams ?: return
+        if (dock.visibility == View.VISIBLE && dock.height > 0) {
+            pagerLp.bottomMargin = dock.height + (16 * resources.displayMetrics.density).toInt()
+        } else {
+            pagerLp.bottomMargin = 0
+        }
+        binding.homeViewPager.layoutParams = pagerLp
+    }
+
+    /**
+     * Первый запуск: док пуст. MIUI тоже показывает в нём несколько иконок
+     * по умолчанию, поэтому подбираем стандартный набор — телефон, сообщения,
+     * камера, браузер, галерея — по первому совпадению в списке установленных
+     * приложений. Если ничего не нашли, док останется пустым и это не ошибка.
+     */
+    private fun seedDockIfEmpty() {
+        if (prefsManager.getDockPackages().isNotEmpty()) return
+
+        val seedPackages = listOf(
+            "com.android.dialer", "com.android.server.telecom",
+            "com.android.contacts", "com.google.android.contacts",
+            "com.android.messaging", "com.google.android.apps.messaging",
+            "com.android.camera2", "com.android.camera",
+            "com.android.chrome", "com.google.android.browser",
+            "com.miui.gallery", "com.android.gallery3d",
+            "com.android.settings",
+            "com.miui.player", "com.android.videoplayer",
+            "com.android.calendar",
+            "com.miui.notes",
+            "com.miui.compass", "com.android.compass",
+            "com.android.clock", "com.android.deskclock",
+            "com.android.fileexplorer", "com.google.android.apps.photos",
+            "com.miui.weather", "com.google.android.weather",
+            "com.miui.composer", "com.android.mms",
+            "com.tencent.mm", "com.whatsapp"
+        )
+
+        val available = allApps.map { it.packageName }.toSet()
+        val picked = seedPackages.filter { it in available }
+            .distinct()
+            .take(currentSettings.dockIconCount.coerceAtLeast(1))
+
+        if (picked.isNotEmpty()) {
+            prefsManager.setDockPackages(picked)
+        }
+    }
+
     private val APPWIDGET_HOST_ID = 1024
     private val REQUEST_PICK_APPWIDGET = 2001
     private val REQUEST_CREATE_APPWIDGET = 2002
@@ -135,6 +277,7 @@ class MainActivity : AppCompatActivity() {
             val counts = MorphixNotificationListenerService.getAllBadgeCounts()
             desktopPagerAdapter.updateBadgeCounts(counts)
             drawerAppsAdapter.updateBadgeCounts(counts)
+            if (::dockAdapter.isInitialized) dockAdapter.updateBadgeCounts(counts)
         }
     }
 
@@ -213,6 +356,9 @@ class MainActivity : AppCompatActivity() {
         currentSettings = prefsManager.loadSettings()
         currentSpace = prefsManager.getCurrentSpace()
         isSecondSpaceActive = (currentSpace == 1)
+
+        setupDock()
+        refreshDock()
 
         appWidgetManager = AppWidgetManager.getInstance(this)
         appWidgetHost = MorphixAppWidgetHost(this, APPWIDGET_HOST_ID)
@@ -391,6 +537,9 @@ class MainActivity : AppCompatActivity() {
         if (currentSettings.layoutMode == LayoutMode.CLASSIC) {
             closeAppDrawer()
         }
+
+        // Док зависит от количества иконок, формы и режима раскладки
+        refreshDock()
 
         updateHomeScreenApps()
     }
@@ -781,15 +930,22 @@ private fun isLowEndDevice(): Boolean {
         binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
     }
 
-    private fun startDesktopDrag(item: AppItem, sourceView: View, rawX: Float, rawY: Float) {
+    private fun startDesktopDrag(
+        item: AppItem,
+        sourceView: View,
+        rawX: Float,
+        rawY: Float,
+        fromDock: Boolean = false
+    ) {
         if (isDraggingDesktopItem) return
         cancelFolderHover()
         cancelLiveSwapHover()
         isDraggingDesktopItem = true
+        isDraggingFromDock = fromDock
         activeDraggedItem = item
         
         val dragSelKey = if (item.isFolder) "folder:${item.folderId}" else item.packageName
-        if (isEditMode && selectedAppsForDrag.contains(dragSelKey)) {
+        if (!fromDock && isEditMode && selectedAppsForDrag.contains(dragSelKey)) {
             val orderedPackages = prefsManager.getHomeScreenOrderedPackages(currentSpace)
             activeDraggedGroup = selectedAppsForDrag.mapNotNull { key -> 
                 resolveDesktopItemDirect(key)
@@ -810,11 +966,19 @@ private fun isLowEndDevice(): Boolean {
         lastPageSwitchTime = SystemClock.uptimeMillis()
 
         desktopPagerAdapter.setDraggedItemPackage(item.packageName)
-        updateHomeScreenApps()
+        // пересобираем сетку только когда тянут из неё: при перетаскивании из дока
+        // это лишний полный ребиндинг и визуальное «дёрганье» иконок
+        if (!fromDock) {
+            updateHomeScreenApps()
+        }
 
         val currentRv = desktopPagerAdapter.getRecyclerViewForPage(dragSourcePageIndex)
         val currentAdapter = currentRv?.adapter as? AppsAdapter
-        dragSourceItemIndex = currentAdapter?.getItems()?.indexOfFirst { it.packageName == item.packageName } ?: 0
+        dragSourceItemIndex = if (fromDock) {
+            -1
+        } else {
+            currentAdapter?.getItems()?.indexOfFirst { it.packageName == item.packageName } ?: 0
+        }
 
         if (item.isWidget) {
             binding.layoutTopDeletePill.visibility = View.VISIBLE
@@ -1015,6 +1179,18 @@ private fun isLowEndDevice(): Boolean {
         val screenWidth = resources.displayMetrics.widthPixels
         val edgeMargin = 50f * resources.displayMetrics.density
         val now = SystemClock.uptimeMillis()
+
+        // Попадание в док: подсвечиваем капсулу и не занимаемся подсветкой ячеек
+        val overDock = dockAcceptsDrop() && dockController.contains(rawX, rawY)
+        if (overDock != isHoveringDock) {
+            isHoveringDock = overDock
+            setDockDropHighlight(overDock)
+            if (overDock) {
+                clearCurrentHighlight()
+                binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+            }
+        }
+        if (overDock) return
 
         if (now - lastPageSwitchTime > 550L) {
             val curPage = binding.homeViewPager.currentItem
@@ -1233,6 +1409,18 @@ private fun isLowEndDevice(): Boolean {
         clearCurrentHighlight()
 
         val hoveringPill = isHoveringDeletePill || checkDeletePillHover(rawX, rawY)
+
+        // Дроп в док обрабатываем раньше всего: это самый частый вариант
+        // при переносе иконки, и он не должен зависеть от состояния сетки
+        val droppingOnDock = isHoveringDock || (dockAcceptsDrop() && dockController.contains(rawX, rawY))
+        if (droppingOnDock) {
+            isHoveringDock = false
+            setDockDropHighlight(false)
+            if (handleDropOnDock()) {
+                resetDragState()
+                return
+            }
+        }
 
         // Drop widget on delete pill -> suck-in poof animation + pill pulse
         if (sourceItem?.isWidget == true && hoveringPill) {
@@ -1757,6 +1945,17 @@ private fun isLowEndDevice(): Boolean {
             hasTemporaryDragPage = false
             stripEmptyTrailingPages()
         }
+
+        // Иконку вытащили из дока и положили на сетку — убираем её из дока.
+        // sourceIdx == -1 в ветках выше означает, что в ordered её не было,
+        // то есть displaceAndInsert уже добавил её на экран.
+        if (isDraggingFromDock && sourceItem != null) {
+            if (effectiveDropMode != HighlightMode.NONE || sourceIdx == -1) {
+                dockController.removePackage(sourceItem.packageName)
+                refreshDock()
+            }
+        }
+
         resetDragState()
         binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
     }
@@ -2518,6 +2717,7 @@ private fun isLowEndDevice(): Boolean {
 
     private fun updatePageIndicator(currentPage: Int, totalPages: Int) {
         binding.homeViewPager.post {
+            updateDockSpacing()
             val vpHeight = binding.homeViewPager.height
             if (vpHeight > 0) {
                 val availableHeight = vpHeight - (24 * resources.displayMetrics.density).toInt()
@@ -2606,19 +2806,37 @@ private fun isLowEndDevice(): Boolean {
                     val diffY = e2.y - e1.y
                     val diffX = e2.x - e1.x
 
-                    // Свайп вниз: шторка уведомлений (в любом месте экрана)
-                    if (diffY > 120 && velocityY > 100 && Math.abs(diffY) > Math.abs(diffX) * 1.2f) {
-                        if (currentSettings.swipeDownToNotifications) {
-                            expandNotificationShade()
-                            return true
+                    if (Math.abs(diffY) > Math.abs(diffX) * 1.2f) {
+                        // Свайп вверх: открываем меню приложений (в режиме DRAWER)
+                        if (diffY < -60 && velocityY < -60) {
+                            if (currentSettings.layoutMode == LayoutMode.DRAWER
+                                && binding.glassAppDrawer.visibility != View.VISIBLE
+                                && !isEditMode
+                            ) {
+                                openAppDrawer()
+                                return true
+                            }
                         }
-                    }
 
-                    // Свайп вверх: открываем меню приложений (в режиме DRAWER)
-                    if (diffY < -60 && velocityY < -60 && Math.abs(diffY) > Math.abs(diffX) * 1.2f) {
-                        if (currentSettings.layoutMode == LayoutMode.DRAWER) {
-                            openAppDrawer()
-                            return true
+                        // Свайп вниз. В MIUI это два разных жеста:
+                        // по рабочему столу — глобальный поиск, по меню
+                        // приложений — шторка уведомлений.
+                        if (diffY > 120 && velocityY > 100) {
+                            if (binding.glassAppDrawer.visibility == View.VISIBLE) {
+                                if (currentSettings.swipeDownToNotifications) {
+                                    closeAppDrawer()
+                                    expandNotificationShade()
+                                    return true
+                                }
+                            } else if (!isEditMode) {
+                                if (currentSettings.showSearchOnHome) {
+                                    openGlobalSearch()
+                                    return true
+                                } else if (currentSettings.swipeDownToNotifications) {
+                                    expandNotificationShade()
+                                    return true
+                                }
+                            }
                         }
                     }
                 }
@@ -2640,6 +2858,8 @@ private fun isLowEndDevice(): Boolean {
     private fun openAppDrawer() {
         if (binding.glassAppDrawer.visibility == View.VISIBLE) return
         binding.glassAppDrawer.visibility = View.VISIBLE
+        // док прячем: он лежит поверх меню приложений и перехватывал бы касания
+        setDockInteractionEnabled(false)
         if (currentSettings.smoothAnimations) {
             val screenHeight = resources.displayMetrics.heightPixels.toFloat().coerceAtLeast(1200f)
             binding.glassAppDrawer.translationY = screenHeight
@@ -2680,6 +2900,7 @@ private fun isLowEndDevice(): Boolean {
                 .alpha(1.0f)
                 .setDuration(200)
                 .setInterpolator(DecelerateInterpolator())
+                .withEndAction { setDockInteractionEnabled(true) }
                 .start()
         } else {
             binding.glassAppDrawer.visibility = View.GONE
@@ -2687,7 +2908,23 @@ private fun isLowEndDevice(): Boolean {
             binding.homeViewPager.scaleX = 1.0f
             binding.homeViewPager.scaleY = 1.0f
             binding.homeViewPager.alpha = 1.0f
+            setDockInteractionEnabled(true)
         }
+    }
+
+    /** Прячет док на время, когда он перекрыт меню приложений или режимом правки. */
+    private fun setDockInteractionEnabled(enabled: Boolean) {
+        if (!::dockController.isInitialized) return
+        val root = binding.dockContainer.root
+        val shouldBeVisible = enabled
+                && currentSettings.isDockEnabled
+                && currentSettings.layoutMode == LayoutMode.DRAWER
+        if (shouldBeVisible) {
+            dockController.applyVisibility(currentSettings)
+        } else {
+            root.visibility = View.GONE
+        }
+        updateDockSpacing()
     }
 
     /**
@@ -2891,6 +3128,8 @@ private fun isLowEndDevice(): Boolean {
 
         // Настройка стекла применяется ко всем стеклянным вьюхам в setupGlassmorphism();
         // здесь только показываем кнопки режима редактирования.
+        // Док прячем: в режиме правки он мешал бы перетаскиванию иконок с сетки в док.
+        setDockInteractionEnabled(false)
         binding.glassEditDone.visibility = View.VISIBLE
         if (currentSettings.smoothAnimations) {
             binding.glassEditDone.alpha = 0f
@@ -2947,6 +3186,7 @@ private fun isLowEndDevice(): Boolean {
         editModeOpenedAt = 0L
         tapCounter = 0
         selectedAppsForDrag.clear()
+        setDockInteractionEnabled(binding.glassAppDrawer.visibility != View.VISIBLE)
 
         // Возвращаем масштаб рабочего стола
         if (currentSettings.smoothAnimations) {
@@ -4674,6 +4914,26 @@ private var editModeOpenedAt = 0L
         biometricPrompt.authenticate(promptInfo)
     }
 
+    /**
+ * Глобальный поиск по свайпу вниз по рабочему столу.
+     *
+     * Открываем уже готовый drawer и сразу ставим фокус в поле поиска: в MIUI
+     * свайп вниз открывает именно поиск, а не просто список приложений.
+     */
+    private fun openGlobalSearch() {
+        if (currentSettings.layoutMode != LayoutMode.DRAWER) {
+            expandNotificationShade()
+            return
+        }
+        openAppDrawer()
+        binding.searchEditText.post {
+            binding.searchEditText.requestFocus()
+            binding.searchEditText.setSelection(binding.searchEditText.text.length)
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+            imm?.showSoftInput(binding.searchEditText, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
     private fun setupSearch() {
         binding.searchEditText.addTextChangedListener { editable ->
             val query = editable?.toString()?.trim()?.lowercase(Locale.getDefault()) ?: ""
@@ -4842,6 +5102,8 @@ private var editModeOpenedAt = 0L
         appLoadJob = lifecycleScope.launch {
             allApps = AppLoader.loadApps(applicationContext)
             autoSeedSecondSpaceIfNeeded()
+            // док заполняется только после загрузки списка приложений
+            seedDockIfEmpty()
 
             // Проверяем наличие приложений Второго пространства
             val hasSecondSpaceApps = allApps.any { it.isSecondSpace } || prefsManager.getSecondSpacePackages().isNotEmpty()
@@ -4849,6 +5111,7 @@ private var editModeOpenedAt = 0L
 
             filterAppsBySpace(isSecondSpaceActive)
             updateHomeScreenApps()
+            refreshDock()
             notificationListener()
         }
     }
@@ -4978,6 +5241,8 @@ private var editModeOpenedAt = 0L
         dragSourceView?.scaleY = 1.0f
         dragSourceView?.alpha = 1.0f
         isDraggingDesktopItem = false
+        isDraggingFromDock = false
+        isHoveringDock = false
         dragSourceView = null
         dragSourceItemIndex = -1
         dragSourcePageIndex = -1
@@ -4993,6 +5258,7 @@ private var editModeOpenedAt = 0L
         binding.widgetDropTargetPreview.visibility = View.GONE
         desktopPagerAdapter.setDraggedItemPackage(null)
         clearCurrentHighlight()
+        if (::dockController.isInitialized) setDockDropHighlight(false)
     }
 
     private fun showCreateFolderDialog(targetItem: com.naua_morphix_launcher.app.model.AppItem, sourceItem: com.naua_morphix_launcher.app.model.AppItem) {
