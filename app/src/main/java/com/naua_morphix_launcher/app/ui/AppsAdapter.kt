@@ -74,6 +74,30 @@ class AppsAdapter(
             draggedItemKey = value?.let { "a:$it:0" }
         }
 
+    /**
+     * Флаг «долгое нажатие уже обработано, тап глотать».
+     *
+     * Держим его на адаптере, а не в холдере: долгое нажатие по пустому месту
+     * открывает режим редактирования, который вызывает updateHomeScreenApps()
+     * и полностью перебиндивает сетку. Локальная переменная холдера при этом
+     * терялась, и ACTION_UP после отпускания пальца воспринимался как обычный
+     * тап — а двойной тап в режиме редактирования выходил из него.
+     */
+    private var longPressConsumed = false
+
+    /** Вызывается холдером перед ACTION_UP, чтобы не отправить «тап» после долгого нажатия. */
+    fun consumeTapAfterLongPress(): Boolean {
+        if (longPressConsumed) {
+            longPressConsumed = false
+            return true
+        }
+        return false
+    }
+
+    private fun markLongPressConsumed() {
+        longPressConsumed = true
+    }
+
     private var attachedRecyclerView: RecyclerView? = null
     var isEditMode: Boolean = false
         private set
@@ -355,11 +379,10 @@ class AppsAdapter(
     inner class AppViewHolder(private val binding: ItemAppGridBinding) :
         RecyclerView.ViewHolder(binding.root) {
 
-        /** Отложенный long-press на пустой ячейке. */
+        /** Отложенный long-press на ячейке. */
         private var pendingLongPress: Runnable? = null
         private var downX = 0f
         private var downY = 0f
-        private var hasLongPressed = false
         private var downRawX = 0f
         private var downRawY = 0f
 
@@ -458,15 +481,15 @@ class AppsAdapter(
                 binding.ivEnlargedSelectCircle.setOnClickListener(null)
                 binding.ivSelectCircle.setOnClickListener(null)
 
-                hasLongPressed = false
+                // флаг не сбрасываем здесь: долгое нажатие вызывает
+                // перебиндинг сетки, и сброс в bind() ломал бы защиту от тапа
                 binding.root.setOnTouchListener { v, event ->
                     when (event.actionMasked) {
                         android.view.MotionEvent.ACTION_DOWN -> {
                             downX = event.rawX
                             downY = event.rawY
-                            hasLongPressed = false
                             pendingLongPress = Runnable {
-                                hasLongPressed = true
+                                markLongPressConsumed()
                                 v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                                 onEmptyCellLongClick?.invoke()
                             }
@@ -481,7 +504,7 @@ class AppsAdapter(
                         }
                         android.view.MotionEvent.ACTION_UP -> {
                             cancelPendingCallbacks()
-                            if (!hasLongPressed) {
+                            if (!consumeTapAfterLongPress()) {
                                 val diffX = Math.abs(event.rawX - downX)
                                 val diffY = Math.abs(event.rawY - downY)
                                 if (diffX <= 12 * density && diffY <= 12 * density) {
@@ -653,13 +676,11 @@ class AppsAdapter(
 
             downRawX = 0f
             downRawY = 0f
-            hasLongPressed = false
             binding.root.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> {
                         downRawX = event.rawX
                         downRawY = event.rawY
-                        hasLongPressed = false
                         if (smoothAnimations) {
                             v.animate()
                                 .scaleX(0.88f)
@@ -669,7 +690,7 @@ class AppsAdapter(
                                 .start()
                         }
                         pendingLongPress = Runnable {
-                            hasLongPressed = true
+                            markLongPressConsumed()
                             v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                             if (onAppStartDrag != null) {
                                 onAppStartDrag.invoke(item, binding.root, downRawX, downRawY)
@@ -710,7 +731,7 @@ class AppsAdapter(
                             v.scaleY = 1.0f
                         }
                         cancelPendingCallbacks()
-                        if (!hasLongPressed) {
+                        if (!consumeTapAfterLongPress()) {
                             val diffX = Math.abs(event.rawX - downRawX)
                             val diffY = Math.abs(event.rawY - downRawY)
                             if (diffX <= 10 * v.resources.displayMetrics.density && diffY <= 10 * v.resources.displayMetrics.density) {

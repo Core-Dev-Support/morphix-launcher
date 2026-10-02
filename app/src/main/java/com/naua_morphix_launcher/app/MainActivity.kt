@@ -2861,6 +2861,8 @@ private fun isLowEndDevice(): Boolean {
     private fun enterEditMode() {
         if (isEditMode) return
         isEditMode = true
+        editModeOpenedAt = SystemClock.uptimeMillis()
+        tapCounter = 0
         dismissActivePopups()
 
         binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
@@ -2950,6 +2952,8 @@ private fun isLowEndDevice(): Boolean {
     private fun exitEditMode() {
         if (!isEditMode) return
         isEditMode = false
+        editModeOpenedAt = 0L
+        tapCounter = 0
         selectedAppsForDrag.clear()
 
         // Возвращаем масштаб рабочего стола
@@ -4423,8 +4427,20 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
         biometricPrompt.authenticate(promptInfo)
     }
 
+    /**
+     * Метку времени, когда долгое нажатие открыло режим редактирования.
+     * После отпускания пальца долетает ACTION_UP, который иначе засчитался бы
+     * вторым тапом в handleScreenTap() и сразу вышел бы из режима редактирования.
+     */
+private var editModeOpenedAt = 0L
+
     private fun handleScreenTap() {
         if (isEditMode) {
+            // не реагируем на тап, случившийся в момент открытия режима редактирования
+            if (SystemClock.uptimeMillis() - editModeOpenedAt < 700) {
+                tapCounter = 0
+                return
+            }
             exitEditMode()
             return
         }
