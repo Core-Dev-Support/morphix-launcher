@@ -1,4 +1,4 @@
-@file:Suppress("DEPRECATION")
+﻿@file:Suppress("DEPRECATION")
 package com.naua_morphix_launcher.app
 
 import android.annotation.SuppressLint
@@ -410,34 +410,43 @@ private fun isLowEndDevice(): Boolean {
         return isLow
     }
 
-    private fun applyGlassQuality() {
+    /** Рекурсивно собирает все LiquidGlassView в дереве вьюх. */
+    private fun collectGlassViews(view: View, out: MutableList<LiquidGlassView> = mutableListOf()): MutableList<LiquidGlassView> {
+        if (view is LiquidGlassView) out.add(view)
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                collectGlassViews(view.getChildAt(i), out)
+            }
+        }
+        return out
+    }
+
+    /**
+     * Применяет настройку «жидкое стекло» ко всем вьюхам разом.
+     *
+     * Раньше стекло выставлялось только drawer'у и карточке папки, а кнопки
+     * режима редактирования (Обои / Виджеты / Настройки / Удалить / Готово)
+     * обновлялись исключительно внутри enterEditMode(). Поэтому после
+     * сохранения настройки они оставались в старом состоянии до следующего
+     * долгого тапа по экрану.
+     */
+    private fun applyGlassToAllViews() {
+        val enabled = currentSettings.isGlassEnabled
         val quality = if (isLowEndDevice()) {
             LiquidGlassView.REDUCED_QUALITY
         } else {
             LiquidGlassView.FULL_QUALITY
         }
-        binding.glassAppDrawer.setQuality(quality)
-        binding.folderFullscreenOverlay.glassFolderCard.setQuality(quality)
+        for (glassView in collectGlassViews(binding.root)) {
+            glassView.setQuality(quality)
+            glassView.setGlassEnabled(enabled)
+        }
+        isBlurInitialized = true
     }
 
     private fun setupGlassmorphism() {
-        applyGlassQuality()
-
-        if (currentSettings.isGlassEnabled) {
-            if (!isBlurInitialized) {
-                binding.glassAppDrawer.setupWithActivityRoot()
-                binding.folderFullscreenOverlay.glassFolderCard.setupWithActivityRoot()
-                isBlurInitialized = true
-            }
-
-            binding.glassAppDrawer.setGlassEnabled(true)
-            binding.folderFullscreenOverlay.glassFolderCard.setGlassEnabled(true)
-        } else {
-            if (isBlurInitialized) {
-                binding.glassAppDrawer.setGlassEnabled(false)
-                binding.folderFullscreenOverlay.glassFolderCard.setGlassEnabled(false)
-            }
-        }
+        // Обновляем все стеклянные вьюхи, включая кнопки режима редактирования
+        applyGlassToAllViews()
     }
 
     private fun setupHomeScreenApps() {
@@ -2880,10 +2889,8 @@ private fun isLowEndDevice(): Boolean {
             binding.homeViewPager.scaleY = 0.92f
         }
 
-        // Показываем кнопку Готово
-        binding.glassEditDone.setupWithActivityRoot()
-        binding.glassEditDone.setRadius(currentSettings.blurRadius)
-        binding.glassEditDone.setGlassEnabled(currentSettings.isGlassEnabled)
+        // Настройка стекла применяется ко всем стеклянным вьюхам в setupGlassmorphism();
+        // здесь только показываем кнопки режима редактирования.
         binding.glassEditDone.visibility = View.VISIBLE
         if (currentSettings.smoothAnimations) {
             binding.glassEditDone.alpha = 0f
@@ -2891,11 +2898,8 @@ private fun isLowEndDevice(): Boolean {
         } else {
             binding.glassEditDone.alpha = 1f
         }
-        
+
         // Показываем кнопку Удалить
-        binding.glassDeletePage.setupWithActivityRoot()
-        binding.glassDeletePage.setRadius(currentSettings.blurRadius)
-        binding.glassDeletePage.setGlassEnabled(currentSettings.isGlassEnabled)
         binding.glassDeletePage.visibility = View.VISIBLE
         if (currentSettings.smoothAnimations) {
             binding.glassDeletePage.alpha = 0f
@@ -2908,18 +2912,6 @@ private fun isLowEndDevice(): Boolean {
         binding.pageIndicatorLayout.visibility = View.GONE
 
         // Показываем 3 круглые кнопки внизу: Обои, Виджеты, Настройки
-        binding.glassWallpaper.setupWithActivityRoot()
-        binding.glassWallpaper.setRadius(currentSettings.blurRadius)
-        binding.glassWallpaper.setGlassEnabled(currentSettings.isGlassEnabled)
-
-        binding.glassWidgets.setupWithActivityRoot()
-        binding.glassWidgets.setRadius(currentSettings.blurRadius)
-        binding.glassWidgets.setGlassEnabled(currentSettings.isGlassEnabled)
-
-        binding.glassSettings.setupWithActivityRoot()
-        binding.glassSettings.setRadius(currentSettings.blurRadius)
-        binding.glassSettings.setGlassEnabled(currentSettings.isGlassEnabled)
-
         binding.glassEditModeBottomBar.visibility = View.VISIBLE
         if (currentSettings.smoothAnimations) {
             binding.glassEditModeBottomBar.alpha = 0f
