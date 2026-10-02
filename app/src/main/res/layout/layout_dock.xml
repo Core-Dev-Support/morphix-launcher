@@ -8,7 +8,7 @@
     android:layout_height="wrap_content"
     android:elevation="14dp"
     android:visibility="gone"
-    app:lg_cornerRadius="34dp"
+    app:lg_cornerRadius="36dp"
     app:lg_fallbackColor="#66101014"
     app:lg_overlayColor="#40FFFFFF"
     tools:visibility="visible"
@@ -19,11 +19,12 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:clipToPadding="false"
+        android:clipChildren="false"
         android:orientation="horizontal"
         android:overScrollMode="never"
-        android:paddingStart="8dp"
-        android:paddingTop="6dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="6dp" />
+        android:paddingStart="10dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="10dp"
+        android:paddingBottom="8dp" />
 
 </com.naua_morphix_launcher.app.views.LiquidGlassView>

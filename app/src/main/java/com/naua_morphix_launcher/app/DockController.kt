@@ -95,19 +95,21 @@ class DockController(
             root.visibility = View.GONE
         }
 
-        // Стиль: FLOATING = парящая капсула по центру, FULL_WIDTH = панель во всю ширину
+        // Стиль: FLOATING = парящая капсула по центру, FULL_WIDTH = панель во всю ширину.
+        // ВАЖНО: ограничения start/end задают центровку при WRAP_CONTENT.
+        // Сбрасывать их (UNSET) нельзя — док прижимался к левому краю.
         val lp = root.layoutParams as? ConstraintLayout.LayoutParams ?: return
+        val marginH = (20 * root.resources.displayMetrics.density).toInt()
         if (settings.dockStyle == DockStyle.FULL_WIDTH) {
-            lp.startToStart = 0
-            lp.endToEnd = 0
             lp.width = 0 // MATCH_CONSTRAINT
-            lp.leftMargin = (20 * root.resources.displayMetrics.density).toInt()
-            lp.rightMargin = (20 * root.resources.displayMetrics.density).toInt()
-            root.setPadding(0, 0, 0, 0)
+            lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+            lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+            lp.leftMargin = marginH
+            lp.rightMargin = marginH
         } else {
-            lp.startToStart = ConstraintLayout.LayoutParams.UNSET
-            lp.endToEnd = ConstraintLayout.LayoutParams.UNSET
             lp.width = ConstraintLayout.LayoutParams.WRAP_CONTENT
+            lp.startToStart = ConstraintLayout.LayoutParams.PARENT_ID
+            lp.endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
             lp.leftMargin = 0
             lp.rightMargin = 0
         }

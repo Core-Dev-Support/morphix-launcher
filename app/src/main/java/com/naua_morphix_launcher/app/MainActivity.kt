@@ -32,6 +32,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -42,7 +43,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import androidx.core.view.GestureDetectorCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.GridLayoutManager
@@ -133,6 +136,9 @@ class MainActivity : AppCompatActivity() {
     /** Курсор над доком во время перетаскивания — док подсвечен. */
     private var isHoveringDock = false
 
+    /** Высота системной навигационной панели в пикселях. */
+    private var dockBottomInset = 0
+
     /** Док принимает иконку: обычное приложение, есть свободный слот. */
     private fun dockAcceptsDrop(): Boolean {
         if (!::dockController.isInitialized || !dockController.isDockVisible()) return false
@@ -216,10 +222,20 @@ class MainActivity : AppCompatActivity() {
      * на высоту капсулы. Без этого нижние иконки оказывались под доком.
      */
     private fun updateDockSpacing() {
+        if (!::dockController.isInitialized) return
         val dock = binding.dockContainer.root
+        val density = resources.displayMetrics.density
+
+        // отступ от нижней границы экрана: системная панель + небольшой зазор
+        val dockLp = dock.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
+        dockLp?.let {
+            it.bottomMargin = dockBottomInset + (10 * density).toInt()
+            dock.layoutParams = it
+        }
+
         val pagerLp = binding.homeViewPager.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams ?: return
         if (dock.visibility == View.VISIBLE && dock.height > 0) {
-            pagerLp.bottomMargin = dock.height + (16 * resources.displayMetrics.density).toInt()
+            pagerLp.bottomMargin = dock.height + dockBottomInset + (10 * density).toInt()
         } else {
             pagerLp.bottomMargin = 0
         }
@@ -343,11 +359,26 @@ class MainActivity : AppCompatActivity() {
             window.isNavigationBarContrastEnforced = false
             window.isStatusBarContrastEnforced = false
         }
+        // Лаунчер должен рисоваться поверх системных обоев. Без явного
+        // FLAG_SHOW_WALLPAPER окно остаётся непрозрачным и обои не видны.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+        // фон окна прозрачный, иначе WindowManagerService не подложит обои
         window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         window.decorView.setBackgroundColor(Color.TRANSPARENT)
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         insetsController.isAppearanceLightStatusBars = false
         insetsController.isAppearanceLightNavigationBars = false
+
+        // Лаунчер работает edge-to-edge, поэтому док без учёта системных
+        // отступов уезжал под навигационную панель
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            dockBottomInset = bars.bottom
+            updateDockSpacing()
+            insets
+        }
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -430,6 +461,7 @@ class MainActivity : AppCompatActivity() {
         // без снятия отложенной перезагрузки Handler мог сработать на мёртвой Activity
         appReloadHandler.removeCallbacks(appReloadRunnable)
         appReloadScheduled = false
+        searchDebounceHandler.removeCallbacks(searchDebounceRunnable)
         try {
             unregisterReceiver(packageReceiver)
         } catch (e: Exception) {
@@ -587,7 +619,15 @@ private fun isLowEndDevice(): Boolean {
             LiquidGlassView.FULL_QUALITY
         }
         for (glassView in collectGlassViews(binding.root)) {
-            glassView.setQuality(quality)
+            // Меню приложений занимает весь экран и анимируется при открытии:
+            // шесть градиентных слоёв на ~2.6 Мпикс дают заметный jank,
+            // поэтому для него всегда хватает базовой заливки с обводкой.
+            val viewQuality = if (glassView === binding.glassAppDrawer) {
+                LiquidGlassView.REDUCED_QUALITY
+            } else {
+                quality
+            }
+            glassView.setQuality(viewQuality)
             glassView.setGlassEnabled(enabled)
         }
         isBlurInitialized = true
@@ -4768,7 +4808,12 @@ private var editModeOpenedAt = 0L
         // jank на слабом GPU
         binding.appsRecyclerView.itemAnimator = null
         binding.appsRecyclerView.setHasFixedSize(true)
-        binding.appsRecyclerView.setItemViewCacheSize(8)
+        // список приложений длинный: держим кэш разметки, чтобы при быстром
+        // скролле не инфлятить ячейки на каждом кадре
+        binding.appsRecyclerView.setItemViewCacheSize(20)
+        binding.appsRecyclerView.setDrawingCacheEnabled(false)
+        (binding.appsRecyclerView.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
+            ?.supportsChangeAnimations = false
 
         drawerAppsAdapter = AppsAdapter(
             onAppClick = { item ->
@@ -4934,10 +4979,32 @@ private var editModeOpenedAt = 0L
         }
     }
 
+    /**
+     * Отложенный ввод в поиске. Без дебаунса на каждый символ прогонялись
+     * фильтрация всех приложений и полный DiffUtil — на 300 приложениях
+     * это заметная задержка перед отрисовкой результатов.
+     */
+    private val searchDebounceHandler = Handler(Looper.getMainLooper())
+    private var pendingSearchQuery: String? = null
+    private val searchDebounceRunnable = Runnable {
+        val q = pendingSearchQuery ?: return@Runnable
+        pendingSearchQuery = null
+        filterApps(q)
+    }
+
     private fun setupSearch() {
         binding.searchEditText.addTextChangedListener { editable ->
             val query = editable?.toString()?.trim()?.lowercase(Locale.getDefault()) ?: ""
-            filterApps(query)
+            // пустой запрос отдаём сразу, чтобы очистка поля была мгновенной
+            if (query.isEmpty()) {
+                searchDebounceHandler.removeCallbacks(searchDebounceRunnable)
+                pendingSearchQuery = null
+                filterApps("")
+            } else {
+                pendingSearchQuery = query
+                searchDebounceHandler.removeCallbacks(searchDebounceRunnable)
+                searchDebounceHandler.postDelayed(searchDebounceRunnable, 140)
+            }
         }
 
         binding.searchEditText.setOnFocusChangeListener { view, hasFocus ->

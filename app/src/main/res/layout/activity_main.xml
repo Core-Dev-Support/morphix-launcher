@@ -33,7 +33,7 @@
         <LinearLayout android:id="@+id/pageIndicatorLayout" android:layout_width="wrap_content" android:layout_height="14dp" android:layout_marginBottom="0dp" android:gravity="center" android:orientation="horizontal" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" />
 
         <!-- Док: плавающая стеклянная капсула с быстрым доступом -->
-        <include android:id="@+id/dockContainer" layout="@layout/layout_dock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="16dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" />
+        <include android:id="@+id/dockContainer" layout="@layout/layout_dock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="10dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" />
 
         <!-- ViewPager -->
         <androidx.viewpager2.widget.ViewPager2 android:id="@+id/homeViewPager" android:layout_width="match_parent" android:layout_height="0dp" android:clipChildren="false" android:clipToPadding="false" android:layout_marginTop="28dp" android:layout_marginBottom="0dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintTop_toTopOf="parent" />

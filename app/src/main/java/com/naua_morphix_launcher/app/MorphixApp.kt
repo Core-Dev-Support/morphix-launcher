@@ -1,15 +1,21 @@
 package com.naua_morphix_launcher.app
 
 import android.app.Application
-import com.google.android.material.color.DynamicColors
 import com.naua_morphix_launcher.app.util.AppLoader
 
 class MorphixApp : Application() {
 
+    /**
+     * DynamicColors.applyToActivitiesIfAvailable() НЕ вызывается намеренно.
+     *
+     * Палитра Material You подставляет непрозрачный android:colorBackground /
+     * windowBackground в тему Activity. Для домашнего экрана это ломает главное:
+     * окно становится непрозрачным, WindowManagerService перестаёт подкладывать
+     * системные обои, и пользователь видит чёрный фон вместо обоев.
+     * Своя тема лаунчера (Theme.Morphix.Transparent) задаёт прозрачность явно.
+     */
     override fun onCreate() {
         super.onCreate()
-        // Включение адаптивных системных цветов Material You (из обоев)
-        DynamicColors.applyToActivitiesIfAvailable(this)
     }
 
     /**

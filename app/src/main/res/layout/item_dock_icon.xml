@@ -3,10 +3,11 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/dockCellRoot"
-    android:layout_width="58dp"
-    android:layout_height="66dp"
+    android:layout_width="56dp"
+    android:layout_height="wrap_content"
     android:clipChildren="false"
-    android:clipToPadding="false">
+    android:clipToPadding="false"
+    android:paddingBottom="2dp">
 
     <!-- Подсветка слота при перетаскивании иконки из сетки -->
     <View
@@ -18,13 +19,13 @@
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="wrap_content"
         android:gravity="center_horizontal"
         android:orientation="vertical">
 
         <FrameLayout
-            android:layout_width="52dp"
-            android:layout_height="52dp">
+            android:layout_width="50dp"
+            android:layout_height="50dp">
 
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/dockIcon"
@@ -52,7 +53,7 @@
             android:id="@+id/dockLabel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
+            android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:gravity="center"
             android:maxLines="1"
