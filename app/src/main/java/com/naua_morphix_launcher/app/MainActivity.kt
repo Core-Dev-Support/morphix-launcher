@@ -260,7 +260,7 @@ class MainActivity : AppCompatActivity() {
             .take(currentSettings.dockIconCount.coerceAtLeast(1))
 
         if (picked.isNotEmpty()) {
-            prefsManager.setDockPackages(picked)
+            prefsManager.setDockPackages(packages = picked)
         }
     }
 
@@ -277,7 +277,7 @@ class MainActivity : AppCompatActivity() {
             val counts = MorphixNotificationListenerService.getAllBadgeCounts()
             desktopPagerAdapter.updateBadgeCounts(counts)
             drawerAppsAdapter.updateBadgeCounts(counts)
-            if (::dockAdapter.isInitialized) dockAdapter.updateBadgeCounts(counts)
+            if (::dockController.isInitialized) dockAdapter.updateBadgeCounts(counts)
         }
     }
 

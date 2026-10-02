@@ -131,6 +131,8 @@ class DockController(
         rawX >= it.left && rawX <= it.right && rawY >= it.top && rawY <= it.bottom
     } ?: false
 
+    fun isDockVisible(): Boolean = binding.dockContainer.root.visibility == View.VISIBLE
+
     /** Добавляет пакет. false — слот занят или лимит исчерпан. */
     fun addPackage(packageName: String, maxSlots: Int): Boolean {
         if (dockPackages.contains(packageName)) return false
@@ -149,6 +151,6 @@ class DockController(
     }
 
     private fun persist() {
-        prefsManager.setDockPackages(dockPackages)
+        prefsManager.setDockPackages(packages = dockPackages)
     }
 }
