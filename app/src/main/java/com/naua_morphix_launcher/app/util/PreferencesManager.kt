@@ -41,7 +41,10 @@ class PreferencesManager(context: Context) {
             iconScale = prefs.getFloat("iconScale", 1.0f),
             showLabels = prefs.getBoolean("showLabels", true),
             layoutMode = safeEnum(prefs.getString("layoutMode", null), LayoutMode.DRAWER),
-            gridColumns = prefs.getInt("gridColumns", 5).coerceIn(3, 8),
+            // Лимиты совпадают с ползунками настроек (максимум 10): раньше тут
+            // стояло coerceIn(3, 8), и выставленные 10 колонок после
+            // перезапуска тихо превращались в 8 — получалось «8 на 10».
+            gridColumns = prefs.getInt("gridColumns", 5).coerceIn(3, 10),
             gridRows = prefs.getInt("gridRows", 9).coerceIn(3, 12),
             isDockEnabled = prefs.getBoolean("isDockEnabled", true),
             dockStyle = safeEnum(prefs.getString("dockStyle", null), DockStyle.FLOATING),
