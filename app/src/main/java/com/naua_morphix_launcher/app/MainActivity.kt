@@ -2,6 +2,7 @@
 package com.naua_morphix_launcher.app
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.Dialog
 import android.app.PendingIntent
@@ -416,6 +417,8 @@ class MainActivity : AppCompatActivity() {
         setupSpaceBadge()
         restoreInstalledWidgets()
         loadInstalledApps()
+        // запуск из системного пикера виджетов
+        handleWidgetIntent(intent)
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -437,6 +440,42 @@ class MainActivity : AppCompatActivity() {
         registerReceiver(packageReceiver, pkgFilter)
     }
 
+    /**
+     * Обрабатывает интенты системного пикера виджетов.
+     *
+     * Системный пикер (Samsung, Xiaomi, Google) не добавляет виджет сам — он
+     * отправляет домашнему экрану APPWIDGET_PICK / APPWIDGET_BIND. Без
+     * обработки пользователь видел «Не удалось добавить виджет».
+     */
+    private fun handleWidgetIntent(intent: Intent?) {
+        val action = intent?.action ?: return
+        when (action) {
+            AppWidgetManager.ACTION_APPWIDGET_PICK -> {
+                // Открываем собственный пикер: он уже умеет фильтровать и
+                // показывать размер виджета
+                launchWidgetPicker()
+            }
+            AppWidgetManager.ACTION_APPWIDGET_BIND -> {
+                val widgetId = intent.getIntExtra(
+                    AppWidgetManager.EXTRA_APPWIDGET_ID,
+                    AppWidgetManager.INVALID_APPWIDGET_ID
+                )
+                if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+                    // система уже выдала согласие на привязку — вешаем виджет
+                    attachWidgetToHome(widgetId)
+                }
+                setResult(Activity.RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
+                finish()
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleWidgetIntent(intent)
+    }
+
     override fun onStart() {
         super.onStart()
         try {
@@ -450,10 +489,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        try {
-            appWidgetHost.stopListening()
-        } catch (e: Exception) {
-            e.printStackTrace()
+        // Хост намеренно НЕ останавливаем, если на рабочем столе есть виджеты:
+        // при открытии системного пикера лаунчер уходит в onStop, и после
+        // stopListening() система не может привязать виджет к этому хосту.
+        if (prefsManager.getAppWidgetIds().isEmpty()) {
+            try {
+                appWidgetHost.stopListening()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
         MorphixNotificationListenerService.unregisterListener(notificationListener)
         dismissActivePopups()
