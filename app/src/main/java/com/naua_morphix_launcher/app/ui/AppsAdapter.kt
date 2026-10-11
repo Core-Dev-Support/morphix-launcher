@@ -445,10 +445,18 @@ class AppsAdapter(
             // Ограничение по ширине колонки: раньше размер считался только от
             // высоты строки, и при плотной сетке (8-10 колонок) иконки 52dp
             // налезали друг на друга в 36dp-колонках.
+            // Если список ещё не разложен (width == 0 на первом кадре),
+            // считаем от ширины экрана, а не пропускаем ограничение.
             val parentRv = binding.root.parent as? RecyclerView
             val gridLm = parentRv?.layoutManager as? androidx.recyclerview.widget.GridLayoutManager
-            if (gridLm != null && parentRv.width > 0 && gridLm.spanCount > 0) {
-                val cellW = parentRv.width / gridLm.spanCount
+            if (gridLm != null && gridLm.spanCount > 0) {
+                val totalW = if (parentRv.width > 0) {
+                    parentRv.width - parentRv.paddingLeft - parentRv.paddingRight
+                } else {
+                    val dm = binding.root.resources.displayMetrics
+                    dm.widthPixels - parentRv.paddingLeft - parentRv.paddingRight
+                }
+                val cellW = totalW / gridLm.spanCount
                 val maxByWidth = (cellW - 8 * density).toInt()
                     .coerceIn((24 * density).toInt(), finalIconSize)
                 if (maxByWidth < finalIconSize) finalIconSize = maxByWidth

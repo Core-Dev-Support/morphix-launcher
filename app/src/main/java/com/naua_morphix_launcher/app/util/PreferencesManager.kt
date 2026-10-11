@@ -131,6 +131,22 @@ class PreferencesManager(context: Context) {
         prefs.edit().putString(key, raw).apply()
     }
 
+    /**
+     * Количество иконок дока, под которое список уже синхронизирован.
+     * Нужно, чтобы понять, что ползунок «Иконок в доке» именно ИЗМЕНИЛИ:
+     * ручное удаление иконки перетаскиванием счётчик не трогает, и док
+     * не должен сам её возвращать при каждом обновлении.
+     */
+    fun getDockSyncedCount(spaceIndex: Int = 0): Int {
+        val key = if (spaceIndex == 0) "dockSyncedCount" else "dockSyncedCount_space_$spaceIndex"
+        return prefs.getInt(key, -1)
+    }
+
+    fun setDockSyncedCount(spaceIndex: Int = 0, count: Int) {
+        val key = if (spaceIndex == 0) "dockSyncedCount" else "dockSyncedCount_space_$spaceIndex"
+        prefs.edit().putInt(key, count).apply()
+    }
+
     fun setHomeScreenOrderedPackages(spaceIndex: Int = 0, packages: List<String>) {
         orderedPackagesCache[spaceIndex] = ArrayList(packages)
         val key = if (spaceIndex == 0) "homeScreenOrderedPackages" else "homeScreenOrderedPackages_space_$spaceIndex"

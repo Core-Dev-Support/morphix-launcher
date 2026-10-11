@@ -85,15 +85,56 @@ class DockController(
         settings: LauncherSettings
     ) {
         dockPackages = prefsManager.getDockPackages().toMutableList()
+
+        // Ползунок «Иконок в доке» изменили — подгоняем список под него.
+        // Делаем это только при смене значения (метка dockSyncedCount):
+        // ручное удаление иконки перетаскиванием док сам возвращать не должен.
+        // Синхронизацию пропускаем, пока список приложений пуст (первый кадр
+        // до загрузки), иначе пустой док «защёлкнется» как синхронизированный.
+        if (allApps.isNotEmpty() && prefsManager.getDockSyncedCount() != settings.dockIconCount) {
+            syncDockToCount(allApps, hiddenPackages, settings.dockIconCount)
+            prefsManager.setDockSyncedCount(count = settings.dockIconCount)
+        }
+
         val byPackage = allApps.associateBy { it.packageName }
         val items = dockPackages
             .mapNotNull { pkg -> if (pkg.isEmpty()) null else byPackage[pkg] }
             .filter { it.packageName !in hiddenPackages }
+            .take(settings.dockIconCount.coerceAtLeast(0))
 
         adapter.updateConfig(settings.iconShape, settings.showLabels)
         adapter.submit(items)
         applyDockLayout(settings.dockStyle, items.size.coerceAtLeast(1))
         applyVisibility(settings)
+    }
+
+    /**
+     * Добирает stored-список до заданного количества из стандартного набора
+     * (телефон, сообщения, камера, ...). Порядок существующих иконок не
+     * меняется. Лишнее НЕ удаляем никогда: уменьшение ползунка только прячет
+     * хвост на экране (display делает take(N)), и возврат ползунка всё
+     * восстанавливает. Иначе обновление затёрло бы иконки тем, у кого их
+     * оказалось больше лимита.
+     */
+    private fun syncDockToCount(allApps: List<AppItem>, hiddenPackages: Set<String>, count: Int) {
+        val target = count.coerceIn(0, MAX_DOCK_SLOTS)
+        val available = allApps.map { it.packageName }.toSet()
+        val compact = dockPackages
+            .filter { it.isNotEmpty() && it in available && it !in hiddenPackages }
+            .distinct()
+            .toMutableList()
+
+        if (compact.size < target) {
+            for (pkg in defaultCandidates()) {
+                if (compact.size >= target) break
+                if (pkg in available && pkg !in compact && pkg !in hiddenPackages) {
+                    compact.add(pkg)
+                }
+            }
+        }
+
+        dockPackages = compact
+        persist()
     }
 
     /**
@@ -162,11 +203,17 @@ class DockController(
 
     fun isDockVisible(): Boolean = binding.dockContainer.root.visibility == View.VISIBLE
 
-    /** Добавляет пакет. false — слот занят или лимит исчерпан. */
+    /** Добавляет пакет. false — уже в доке или лимит исчерпан. */
     fun addPackage(packageName: String, maxSlots: Int): Boolean {
         if (dockPackages.contains(packageName)) return false
-        if (dockPackages.count { it.isNotEmpty() } >= maxSlots) return false
-        dockPackages.add(packageName)
+        if (dockPackages.count { it.isNotEmpty() } >= maxSlots.coerceIn(0, MAX_DOCK_SLOTS)) return false
+        // занимаем первую пустую дырку от удалённой иконки, а не растём в конец
+        val hole = dockPackages.indexOfFirst { it.isEmpty() }
+        if (hole != -1) {
+            dockPackages[hole] = packageName
+        } else {
+            dockPackages.add(packageName)
+        }
         persist()
         return true
     }
@@ -181,5 +228,32 @@ class DockController(
 
     private fun persist() {
         prefsManager.setDockPackages(packages = dockPackages)
+    }
+
+    companion object {
+        /** Жёсткий потолок слотов дока (совпадает с максимумом ползунка). */
+        const val MAX_DOCK_SLOTS = 7
+
+        /**
+         * Кандидаты для автозаполнения дока: телефон, сообщения, камера,
+         * браузер, галерея и дальше по убыванию «стандартности».
+         */
+        fun defaultCandidates(): List<String> = listOf(
+            "com.android.dialer", "com.android.server.telecom",
+            "com.android.contacts", "com.google.android.contacts",
+            "com.android.messaging", "com.google.android.apps.messaging",
+            "com.android.camera2", "com.android.camera",
+            "com.android.chrome", "com.google.android.browser",
+            "com.miui.gallery", "com.android.gallery3d",
+            "com.android.settings",
+            "com.miui.player", "com.android.videoplayer",
+            "com.android.calendar",
+            "com.miui.notes",
+            "com.android.deskclock", "com.android.clock",
+            "com.android.fileexplorer", "com.google.android.apps.photos",
+            "com.miui.weather",
+            "com.android.mms",
+            "com.tencent.mm", "com.whatsapp"
+        )
     }
 }

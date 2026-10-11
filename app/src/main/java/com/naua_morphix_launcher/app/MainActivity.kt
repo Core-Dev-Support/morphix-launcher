@@ -289,33 +289,15 @@ class MainActivity : AppCompatActivity() {
     private fun seedDockIfEmpty() {
         if (prefsManager.getDockPackages().isNotEmpty()) return
 
-        val seedPackages = listOf(
-            "com.android.dialer", "com.android.server.telecom",
-            "com.android.contacts", "com.google.android.contacts",
-            "com.android.messaging", "com.google.android.apps.messaging",
-            "com.android.camera2", "com.android.camera",
-            "com.android.chrome", "com.google.android.browser",
-            "com.miui.gallery", "com.android.gallery3d",
-            "com.android.settings",
-            "com.miui.player", "com.android.videoplayer",
-            "com.android.calendar",
-            "com.miui.notes",
-            "com.miui.compass", "com.android.compass",
-            "com.android.clock", "com.android.deskclock",
-            "com.android.fileexplorer", "com.google.android.apps.photos",
-            "com.miui.weather", "com.google.android.weather",
-            "com.miui.composer", "com.android.mms",
-            "com.tencent.mm", "com.whatsapp"
-        )
-
         val available = allApps.map { it.packageName }.toSet()
-        val picked = seedPackages.filter { it in available }
+        val picked = DockController.defaultCandidates().filter { it in available }
             .distinct()
             .take(currentSettings.dockIconCount.coerceAtLeast(1))
 
         if (picked.isNotEmpty()) {
             prefsManager.setDockPackages(packages = picked)
         }
+        prefsManager.setDockSyncedCount(count = currentSettings.dockIconCount)
     }
 
     private val APPWIDGET_HOST_ID = 1024
@@ -4224,9 +4206,16 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
 
     private fun showSetDefaultLauncherDialog() {
         dismissActivePopups()
+        // На Xiaomi/HyperOS выбор стороннего лаунчера по умолчанию сам переводит
+        // системную навигацию с жестов на кнопки — это ограничение прошивки,
+        // а не баг Morphix. Предупреждаем заранее, чтобы не было сюрприза.
+        val message = "Пожалуйста, сделайте Morphix Launcher вашим приложением " +
+            "по умолчанию для лучшего опыта." +
+            "\n\nНа Xiaomi жесты заменятся кнопками — так прошивка работает " +
+            "с любым сторонним лаунчером."
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle("Добро пожаловать в Morphix!")
-            .setMessage("Пожалуйста, сделайте Morphix Launcher вашим приложением по умолчанию для лучшего опыта.")
+            .setMessage(message)
             .setPositiveButton("Перейти в настройки") { _, _ ->
                 openDefaultLauncherChooser()
             }
@@ -4237,29 +4226,49 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     }
 
     private fun openDefaultLauncherChooser() {
+        // Всё, включая createRequestRoleIntent, внутри try: раньше создание
+        // интента было снаружи, и на части прошивок кнопка молча умирала.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
-            if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true &&
-                !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
-            ) {
-                val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
-                try {
-                    startActivity(intent)
-                    return
-                } catch (e: Exception) {
-                    e.printStackTrace()
+            try {
+                val roleManager = getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
+                if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true &&
+                    !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
+                ) {
+                    val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
+                    if (intent.resolveActivity(packageManager) != null) {
+                        startActivity(intent)
+                        return
+                    }
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
         try {
-            startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
-        } catch (e: Exception) {
-            try {
-                startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
-            } catch (e2: Exception) {
-                Toast.makeText(this, "Откройте Настройки -> Приложения по умолчанию", Toast.LENGTH_LONG).show()
+            val manageIntent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+            if (manageIntent.resolveActivity(packageManager) != null) {
+                startActivity(manageIntent)
+                return
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
+        try {
+            val homeIntent = Intent(Settings.ACTION_HOME_SETTINGS)
+            if (homeIntent.resolveActivity(packageManager) != null) {
+                startActivity(homeIntent)
+                return
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        // Сюда доходим, только если системе вообще некуда вести, —
+        // показываем точный путь вместо тишины.
+        Toast.makeText(
+            this,
+            "Не вышло открыть выбор: Настройки → Приложения → По умолчанию → Главный экран",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun launchWidgetPicker() {
