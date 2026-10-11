@@ -2963,6 +2963,10 @@ private fun isLowEndDevice(): Boolean {
     private fun openAppDrawer() {
         if (binding.glassAppDrawer.visibility == View.VISIBLE) return
         binding.glassAppDrawer.visibility = View.VISIBLE
+        // настройка «Поиск в меню»: без неё поле поиска и веб-кнопка скрыты
+        val searchVisible = currentSettings.showSearchInDrawer
+        binding.searchContainer.visibility = if (searchVisible) View.VISIBLE else View.GONE
+        if (!searchVisible) binding.btnWebSearch.visibility = View.GONE
         // док прячем: он лежит поверх меню приложений и перехватывал бы касания
         setDockInteractionEnabled(false)
         if (currentSettings.smoothAnimations) {

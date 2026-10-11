@@ -219,6 +219,24 @@ class SettingsDialog(
         binding.layoutDockOptions.visibility =
             if (settings.isDockEnabled) android.view.View.VISIBLE else android.view.View.GONE
 
+        // Жесты: переключатели для настроек, у которых раньше не было UI
+        binding.switchTapToLock.isChecked = settings.enableTapToLock
+        binding.switchTapToLock.setOnCheckedChangeListener { _, isChecked ->
+            settings = settings.copy(enableTapToLock = isChecked)
+        }
+        binding.switchSwipeDown.isChecked = settings.swipeDownToNotifications
+        binding.switchSwipeDown.setOnCheckedChangeListener { _, isChecked ->
+            settings = settings.copy(swipeDownToNotifications = isChecked)
+        }
+        binding.switchSearchOnHome.isChecked = settings.showSearchOnHome
+        binding.switchSearchOnHome.setOnCheckedChangeListener { _, isChecked ->
+            settings = settings.copy(showSearchOnHome = isChecked)
+        }
+        binding.switchSearchInDrawer.isChecked = settings.showSearchInDrawer
+        binding.switchSearchInDrawer.setOnCheckedChangeListener { _, isChecked ->
+            settings = settings.copy(showSearchInDrawer = isChecked)
+        }
+
         // Жесты
         binding.labelLockScreenStatus.text = "${settings.tapsToLockCount} тапа"
         binding.btnOpenLockScreenDialog.setOnClickListener {
@@ -314,6 +332,10 @@ class SettingsDialog(
             isDockEnabled = binding.switchDock.isChecked,
             dockStyle = selectedDockStyle,
             dockIconCount = binding.sliderDockIconCount.value.toInt(),
+            showSearchOnHome = binding.switchSearchOnHome.isChecked,
+            showSearchInDrawer = binding.switchSearchInDrawer.isChecked,
+            swipeDownToNotifications = binding.switchSwipeDown.isChecked,
+            enableTapToLock = binding.switchTapToLock.isChecked,
             smoothAnimations = binding.switchSmoothAnimations.isChecked
         )
     }

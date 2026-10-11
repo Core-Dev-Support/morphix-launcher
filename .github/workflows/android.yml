@@ -1,5 +1,8 @@
 name: Android CI
 
+# Тестовые сборки: только подписанный Release APK как артефакт.
+# Публикаций (GitHub Releases / Play) нет — артефакт забирается вручную
+# из Actions и ставится поверх для проверки.
 on:
   push:
     branches: [ main, master ]
@@ -14,7 +17,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build APK
+    name: Build Release APK
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -35,23 +38,6 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      # Lint не блокирует сборку APK: проблемы показываются в логе и в отчёте,
-      # но release/debug собираются в любом случае.
-      - name: Lint
-        continue-on-error: true
-        run: ./gradlew --no-daemon --stacktrace lintDebug
-
-      - name: Build Debug APK
-        run: ./gradlew --no-daemon --stacktrace assembleDebug
-
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: morphix-launcher-debug
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
-          if-no-files-found: error
-
       # --- Подписанный Release APK ---
       # Секреты читаем в одном шаге: контекст secrets недоступен напрямую в if:.
       - name: Check signing secrets
@@ -63,11 +49,11 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Release APK пропущен: не заданы секреты KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD"
+            echo "::error::Нет секретов подписи (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD) — собирать нечего"
+            exit 1
           fi
 
       - name: Decode signing keystore
-        if: steps.signing.outputs.configured == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
@@ -75,7 +61,6 @@ jobs:
           echo "keystore.jks создан ($(stat -c%s keystore.jks) байт)"
 
       - name: Create keystore.properties
-        if: steps.signing.outputs.configured == 'true'
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -90,11 +75,9 @@ jobs:
           echo "keystore.properties создан"
 
       - name: Build Release APK
-        if: steps.signing.outputs.configured == 'true'
         run: ./gradlew --no-daemon --stacktrace assembleRelease
 
       - name: Upload Release APK
-        if: steps.signing.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: morphix-launcher-release

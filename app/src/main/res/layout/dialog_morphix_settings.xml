@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <com.naua_morphix_launcher.app.views.LiquidGlassView xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto" android:id="@+id/glassSettingsRoot" android:layout_width="match_parent" android:layout_height="match_parent" app:lg_cornerRadius="32dp" app:lg_overlayColor="#80121216" app:lg_fallbackColor="#E6121216">
 
 <androidx.core.widget.NestedScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:background="@android:color/transparent">
@@ -185,6 +185,54 @@
                 </LinearLayout>
 
                 <ImageView android:layout_width="wrap_content" android:layout_height="wrap_content" android:src="@drawable/ic_chevron_right" />
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
+
+            <!-- Блокировка тапом -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="👆" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Блокировка тапом" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchTapToLock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:theme="@style/Widget.Material3.CompoundButton.Switch" />
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
+
+            <!-- Свайп вниз -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="⬇️" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Свайп вниз" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchSwipeDown" android:layout_width="wrap_content" android:layout_height="wrap_content" android:theme="@style/Widget.Material3.CompoundButton.Switch" />
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
+
+            <!-- Поиск свайпом вниз -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="🔍" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Поиск свайпом" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchSearchOnHome" android:layout_width="wrap_content" android:layout_height="wrap_content" android:theme="@style/Widget.Material3.CompoundButton.Switch" />
+            </LinearLayout>
+
+            <View android:layout_width="match_parent" android:layout_height="1dp" android:background="#ECE6F0" />
+
+            <!-- Поиск в меню приложений -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:padding="14dp" android:gravity="center_vertical">
+
+                <TextView android:layout_width="40dp" android:layout_height="40dp" android:background="@drawable/bg_settings_icon" android:text="🔎" android:gravity="center" android:textSize="18sp" android:layout_marginEnd="12dp" />
+
+                <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Поиск в меню" android:textColor="#FFFFFF" android:textSize="15sp" android:textStyle="bold" />
+
+                <androidx.appcompat.widget.SwitchCompat android:id="@+id/switchSearchInDrawer" android:layout_width="wrap_content" android:layout_height="wrap_content" android:theme="@style/Widget.Material3.CompoundButton.Switch" />
             </LinearLayout>
         </LinearLayout>
 

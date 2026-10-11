@@ -123,7 +123,12 @@ object SettingsSubDialogs {
 
         fun updateStatuses() {
             val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-            val compName = ComponentName(context, "com.naua_morphix_launcher.app.util.LockScreenAdminReceiver")
+            // Класс указан строкой с ошибкой в пакете — такого ресивера нет,
+            // поэтому статус всегда был «Не выдано», а кнопка вела в никуда.
+            val compName = ComponentName(
+                context,
+                com.naua_morphix_launcher.app.receiver.MorphixDeviceAdminReceiver::class.java
+            )
             val isAdmin = dpm.isAdminActive(compName)
 
             if (isAdmin) {
@@ -149,14 +154,22 @@ object SettingsSubDialogs {
 
         binding.btnDeviceAdmin.setOnClickListener {
             try {
-                val compName = ComponentName(context, "com.naua_morphix_launcher.app.util.LockScreenAdminReceiver")
+                val compName = ComponentName(
+                    context,
+                    com.naua_morphix_launcher.app.receiver.MorphixDeviceAdminReceiver::class.java
+                )
                 val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
                 intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, compName)
                 intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Разрешение требуется для двойного тапа по экрану")
-                context.startActivity(intent)
-                dialog.dismiss()
+                if (intent.resolveActivity(context.packageManager) != null) {
+                    context.startActivity(intent)
+                    dialog.dismiss()
+                } else {
+                    Toast.makeText(context, "Откройте Настройки → Безопасность → Администраторы устройства", Toast.LENGTH_LONG).show()
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
+                Toast.makeText(context, "Откройте Настройки → Безопасность → Администраторы устройства", Toast.LENGTH_LONG).show()
             }
         }
 
@@ -218,29 +231,47 @@ object SettingsSubDialogs {
     }
 
     private fun openDefaultLauncherChooser(context: Context) {
+        // createRequestRoleIntent тоже внутри try + проверка resolveActivity:
+        // иначе кнопка на части прошивок молча умирала.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
-            if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true &&
-                !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
-            ) {
-                val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
-                try {
-                    context.startActivity(intent)
-                    return
-                } catch (e: Exception) {
-                    e.printStackTrace()
+            try {
+                val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
+                if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true &&
+                    !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
+                ) {
+                    val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
+                    if (intent.resolveActivity(context.packageManager) != null) {
+                        context.startActivity(intent)
+                        return
+                    }
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
         try {
-            context.startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
-        } catch (e: Exception) {
-            try {
-                context.startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
-            } catch (e2: Exception) {
-                Toast.makeText(context, "Откройте Настройки -> Приложения по умолчанию", Toast.LENGTH_LONG).show()
+            val manageIntent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+            if (manageIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(manageIntent)
+                return
             }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
+        try {
+            val homeIntent = Intent(Settings.ACTION_HOME_SETTINGS)
+            if (homeIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(homeIntent)
+                return
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        Toast.makeText(
+            context,
+            "Не вышло открыть выбор: Настройки → Приложения → По умолчанию → Главный экран",
+            Toast.LENGTH_LONG
+        ).show()
     }
 
     private fun isAccessibilityServiceEnabled(context: Context): Boolean {

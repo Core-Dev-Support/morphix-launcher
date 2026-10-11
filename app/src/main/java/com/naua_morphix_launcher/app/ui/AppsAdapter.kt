@@ -386,6 +386,140 @@ class AppsAdapter(
         private var downRawX = 0f
         private var downRawY = 0f
 
+        /**
+         * Элемент под слушателем касаний. Слушатель ставится один раз в init,
+         * а не пересоздаётся на каждый bind: при быстром скролле меню это
+         * десятки лишних замыканий в секунду и GC-затупы. bind() только
+         * обновляет currentItem. downItem фиксирует элемент в момент нажатия —
+         * как раньше фиксировало замыкание.
+         */
+        private var currentItem: AppItem = AppItem.empty()
+        private var downItem: AppItem = AppItem.empty()
+
+        init {
+            binding.root.setOnTouchListener { v, event -> handleRootTouch(v, event) }
+            binding.root.setOnClickListener(null)
+            binding.root.setOnLongClickListener(null)
+        }
+
+        private fun handleRootTouch(v: View, event: android.view.MotionEvent): Boolean {
+            val density = v.resources.displayMetrics.density
+            val item = currentItem
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downItem = item
+                    if (item.isEmpty) {
+                        downX = event.rawX
+                        downY = event.rawY
+                        pendingLongPress = Runnable {
+                            markLongPressConsumed()
+                            v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                            onEmptyCellLongClick?.invoke()
+                        }
+                        TOUCH_HANDLER.postDelayed(pendingLongPress!!, 160)
+                    } else {
+                        downRawX = event.rawX
+                        downRawY = event.rawY
+                        if (smoothAnimations) {
+                            v.animate()
+                                .scaleX(0.88f)
+                                .scaleY(0.88f)
+                                .setDuration(120)
+                                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                                .start()
+                        }
+                        val pressedItem = downItem
+                        pendingLongPress = Runnable {
+                            markLongPressConsumed()
+                            v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                            if (onAppStartDrag != null) {
+                                onAppStartDrag.invoke(pressedItem, binding.root, downRawX, downRawY)
+                            } else {
+                                onAppLongClick?.invoke(pressedItem, binding.root, this)
+                            }
+                        }
+                        TOUCH_HANDLER.postDelayed(pendingLongPress!!, 200)
+                    }
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    if (item.isEmpty) {
+                        val diffX = Math.abs(event.rawX - downX)
+                        val diffY = Math.abs(event.rawY - downY)
+                        if (diffX > 12 * density || diffY > 12 * density) {
+                            cancelPendingCallbacks()
+                        }
+                    } else {
+                        val diffX = Math.abs(event.rawX - downRawX)
+                        val diffY = Math.abs(event.rawY - downRawY)
+                        if (diffX > 10 * density || diffY > 10 * density) {
+                            if (smoothAnimations) {
+                                v.animate()
+                                    .scaleX(1.0f)
+                                    .scaleY(1.0f)
+                                    .setDuration(150)
+                                    .setInterpolator(android.view.animation.DecelerateInterpolator())
+                                    .start()
+                            } else {
+                                v.scaleX = 1.0f
+                                v.scaleY = 1.0f
+                            }
+                            cancelPendingCallbacks()
+                        }
+                    }
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    if (!item.isEmpty) {
+                        if (smoothAnimations) {
+                            v.animate()
+                                .scaleX(1.0f)
+                                .scaleY(1.0f)
+                                .setDuration(220)
+                                .setInterpolator(android.view.animation.OvershootInterpolator(2.2f))
+                                .start()
+                        } else {
+                            v.scaleX = 1.0f
+                            v.scaleY = 1.0f
+                        }
+                    }
+                    cancelPendingCallbacks()
+                    if (!consumeTapAfterLongPress()) {
+                        if (item.isEmpty) {
+                            val diffX = Math.abs(event.rawX - downX)
+                            val diffY = Math.abs(event.rawY - downY)
+                            if (diffX <= 12 * density && diffY <= 12 * density) {
+                                v.performClick()
+                                onEmptyCellClick?.invoke()
+                            }
+                        } else {
+                            val diffX = Math.abs(event.rawX - downRawX)
+                            val diffY = Math.abs(event.rawY - downRawY)
+                            if (diffX <= 10 * density && diffY <= 10 * density) {
+                                v.performClick()
+                                onAppClickWithView?.invoke(downItem, v) ?: onAppClick(downItem)
+                            }
+                        }
+                    }
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    if (!item.isEmpty) {
+                        if (smoothAnimations) {
+                            v.animate()
+                                .scaleX(1.0f)
+                                .scaleY(1.0f)
+                                .setDuration(150)
+                                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                                .start()
+                        } else {
+                            v.scaleX = 1.0f
+                            v.scaleY = 1.0f
+                        }
+                    }
+                    cancelPendingCallbacks()
+                }
+            }
+            return true
+        }
+
         private val enlargedMiniViews: Array<android.widget.ImageView> = arrayOf(
             binding.ivEnlargedMini1,
             binding.ivEnlargedMini2,
@@ -426,6 +560,8 @@ class AppsAdapter(
 
         fun bind(item: AppItem) {
             val density = binding.root.resources.displayMetrics.density
+            // слушатель из init читает элемент отсюда
+            currentItem = item
 
             // Динамический адаптивный размер иконки под высоту ячейки сетки, чтобы подписи ВСЕГДА помещались
             var finalIconSize: Int
@@ -501,44 +637,10 @@ class AppsAdapter(
                 binding.ivEnlargedSelectCircle.setOnClickListener(null)
                 binding.ivSelectCircle.setOnClickListener(null)
 
+                // Слушатель касаний общий (ставится в init и ветвится по
+                // currentItem): здесь только сброс, без пересоздания.
                 // флаг не сбрасываем здесь: долгое нажатие вызывает
                 // перебиндинг сетки, и сброс в bind() ломал бы защиту от тапа
-                binding.root.setOnTouchListener { v, event ->
-                    when (event.actionMasked) {
-                        android.view.MotionEvent.ACTION_DOWN -> {
-                            downX = event.rawX
-                            downY = event.rawY
-                            pendingLongPress = Runnable {
-                                markLongPressConsumed()
-                                v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                                onEmptyCellLongClick?.invoke()
-                            }
-                            TOUCH_HANDLER.postDelayed(pendingLongPress!!, 160)
-                        }
-                        android.view.MotionEvent.ACTION_MOVE -> {
-                            val diffX = Math.abs(event.rawX - downX)
-                            val diffY = Math.abs(event.rawY - downY)
-                            if (diffX > 12 * density || diffY > 12 * density) {
-                                cancelPendingCallbacks()
-                            }
-                        }
-                        android.view.MotionEvent.ACTION_UP -> {
-                            cancelPendingCallbacks()
-                            if (!consumeTapAfterLongPress()) {
-                                val diffX = Math.abs(event.rawX - downX)
-                                val diffY = Math.abs(event.rawY - downY)
-                                if (diffX <= 12 * density && diffY <= 12 * density) {
-                                    v.performClick()
-                                    onEmptyCellClick?.invoke()
-                                }
-                            }
-                        }
-                        android.view.MotionEvent.ACTION_CANCEL -> cancelPendingCallbacks()
-                    }
-                    true
-                }
-                binding.root.setOnClickListener(null)
-                binding.root.setOnLongClickListener(null)
                 return
             }
 
@@ -557,12 +659,14 @@ class AppsAdapter(
                     binding.layoutEnlargedFolder.setGlassEnabled(activity.currentSettings.isGlassEnabled)
                 }
 
+                val enlargedShape = getShapeModel(iconShape)
+
                 // App 1
                 val app1 = item.folderApps.getOrNull(0)
                 if (app1 != null) {
                     binding.enlargedApp1.visibility = View.VISIBLE
                     binding.ivEnlargedIcon1.setImageDrawable(app1.icon)
-                    binding.ivEnlargedIcon1.shapeAppearanceModel = getShapeModel(iconShape)
+                    if (binding.ivEnlargedIcon1.shapeAppearanceModel !== enlargedShape) binding.ivEnlargedIcon1.shapeAppearanceModel = enlargedShape
                     binding.tvEnlargedLabel1.text = app1.label
                     binding.enlargedApp1.setOnClickListener { onAppClick(app1) }
                 } else {
@@ -574,7 +678,7 @@ class AppsAdapter(
                 if (app2 != null) {
                     binding.enlargedApp2.visibility = View.VISIBLE
                     binding.ivEnlargedIcon2.setImageDrawable(app2.icon)
-                    binding.ivEnlargedIcon2.shapeAppearanceModel = getShapeModel(iconShape)
+                    if (binding.ivEnlargedIcon2.shapeAppearanceModel !== enlargedShape) binding.ivEnlargedIcon2.shapeAppearanceModel = enlargedShape
                     binding.tvEnlargedLabel2.text = app2.label
                     binding.enlargedApp2.setOnClickListener { onAppClick(app2) }
                 } else {
@@ -586,7 +690,7 @@ class AppsAdapter(
                 if (app3 != null) {
                     binding.enlargedApp3.visibility = View.VISIBLE
                     binding.ivEnlargedIcon3.setImageDrawable(app3.icon)
-                    binding.ivEnlargedIcon3.shapeAppearanceModel = getShapeModel(iconShape)
+                    if (binding.ivEnlargedIcon3.shapeAppearanceModel !== enlargedShape) binding.ivEnlargedIcon3.shapeAppearanceModel = enlargedShape
                     binding.tvEnlargedLabel3.text = app3.label
                     binding.enlargedApp3.setOnClickListener { onAppClick(app3) }
                 } else {
@@ -629,7 +733,8 @@ class AppsAdapter(
                 binding.layoutEnlargedFolder.visibility = View.GONE
                 binding.iconContainer.visibility = View.VISIBLE
                 binding.appLabel.visibility = if (showLabels) View.VISIBLE else View.GONE
-                binding.appLabel.text = item.label
+                // setText с тем же текстом всё равно проходит layout — проверяем
+                if (binding.appLabel.text.toString() != item.label) binding.appLabel.text = item.label
                 // setTextSize безусловно дёргает requestLayout() на каждой ячейке
                 val labelSp = if (itemHeight > 0 && itemHeight < 72 * density) 10.5f else 11.5f
                 if (binding.appLabel.textSize != labelSp) binding.appLabel.textSize = labelSp
@@ -665,8 +770,12 @@ class AppsAdapter(
                     binding.appIcon.visibility = View.VISIBLE
                     binding.appIcon.setImageDrawable(item.icon)
 
-                    // Динамическое аппаратное применение формы иконки (Сквиркл Xiaomi)
-                    binding.appIcon.shapeAppearanceModel = getShapeModel(iconShape)
+                    // Динамическое аппаратное применение формы иконки (Сквиркл Xiaomi).
+                    // Сеттер пересобирает маску даже при той же модели — проверяем.
+                    val shapeModel = getShapeModel(iconShape)
+                    if (binding.appIcon.shapeAppearanceModel !== shapeModel) {
+                        binding.appIcon.shapeAppearanceModel = shapeModel
+                    }
 
                     // Масштаб иконки внутри контейнера нормализован
                     binding.appIcon.scaleX = 1.0f
@@ -694,91 +803,10 @@ class AppsAdapter(
 
             renderBadge(item)
 
+            // Слушатель касаний общий из init (ветвится по currentItem):
+            // координаты обновятся в ACTION_DOWN. Здесь только сброс.
             downRawX = 0f
             downRawY = 0f
-            binding.root.setOnTouchListener { v, event ->
-                when (event.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        downRawX = event.rawX
-                        downRawY = event.rawY
-                        if (smoothAnimations) {
-                            v.animate()
-                                .scaleX(0.88f)
-                                .scaleY(0.88f)
-                                .setDuration(120)
-                                .setInterpolator(android.view.animation.DecelerateInterpolator())
-                                .start()
-                        }
-                        pendingLongPress = Runnable {
-                            markLongPressConsumed()
-                            v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                            if (onAppStartDrag != null) {
-                                onAppStartDrag.invoke(item, binding.root, downRawX, downRawY)
-                            } else {
-                                onAppLongClick?.invoke(item, binding.root, this)
-                            }
-                        }
-                        TOUCH_HANDLER.postDelayed(pendingLongPress!!, 200)
-                    }
-                    android.view.MotionEvent.ACTION_MOVE -> {
-                        val diffX = Math.abs(event.rawX - downRawX)
-                        val diffY = Math.abs(event.rawY - downRawY)
-                        if (diffX > 10 * v.resources.displayMetrics.density || diffY > 10 * v.resources.displayMetrics.density) {
-                            if (smoothAnimations) {
-                                v.animate()
-                                    .scaleX(1.0f)
-                                    .scaleY(1.0f)
-                                    .setDuration(150)
-                                    .setInterpolator(android.view.animation.DecelerateInterpolator())
-                                    .start()
-                            } else {
-                                v.scaleX = 1.0f
-                                v.scaleY = 1.0f
-                            }
-                            cancelPendingCallbacks()
-                        }
-                    }
-                    android.view.MotionEvent.ACTION_UP -> {
-                        if (smoothAnimations) {
-                            v.animate()
-                                .scaleX(1.0f)
-                                .scaleY(1.0f)
-                                .setDuration(220)
-                                .setInterpolator(android.view.animation.OvershootInterpolator(2.2f))
-                                .start()
-                        } else {
-                            v.scaleX = 1.0f
-                            v.scaleY = 1.0f
-                        }
-                        cancelPendingCallbacks()
-                        if (!consumeTapAfterLongPress()) {
-                            val diffX = Math.abs(event.rawX - downRawX)
-                            val diffY = Math.abs(event.rawY - downRawY)
-                            if (diffX <= 10 * v.resources.displayMetrics.density && diffY <= 10 * v.resources.displayMetrics.density) {
-                                v.performClick()
-                                onAppClickWithView?.invoke(item, v) ?: onAppClick(item)
-                            }
-                        }
-                    }
-                    android.view.MotionEvent.ACTION_CANCEL -> {
-                        if (smoothAnimations) {
-                            v.animate()
-                                .scaleX(1.0f)
-                                .scaleY(1.0f)
-                                .setDuration(150)
-                                .setInterpolator(android.view.animation.DecelerateInterpolator())
-                                .start()
-                        } else {
-                            v.scaleX = 1.0f
-                            v.scaleY = 1.0f
-                        }
-                        cancelPendingCallbacks()
-                    }
-                }
-                true
-            }
-            binding.root.setOnClickListener(null)
-            binding.root.setOnLongClickListener(null)
         }
 
         private fun renderBadge(item: AppItem) {
@@ -786,7 +814,10 @@ class AppsAdapter(
             if (unreadCount > 0) {
                 val wasGone = binding.notificationBadge.visibility != View.VISIBLE
                 binding.notificationBadge.visibility = View.VISIBLE
-                binding.notificationBadge.text = if (unreadCount > 99) "99+" else unreadCount.toString()
+                val badgeText = if (unreadCount > 99) "99+" else unreadCount.toString()
+                if (binding.notificationBadge.text.toString() != badgeText) {
+                    binding.notificationBadge.text = badgeText
+                }
                 if (smoothAnimations && wasGone) {
                     binding.notificationBadge.scaleX = 0f
                     binding.notificationBadge.scaleY = 0f
@@ -963,6 +994,7 @@ class AppsAdapter(
         }
 
         fun bind(item: AppItem) {
+            currentWidgetItem = item
             val spanY = item.widgetSpanY.coerceAtLeast(1)
             if (itemHeight > 0) {
                 val totalHeight = itemHeight * spanY
@@ -1041,6 +1073,15 @@ class AppsAdapter(
                 }
             }
 
+            // Корневые слушатели общие из init: здесь только сброс координат.
+            widgetDownRawX = 0f
+            widgetDownRawY = 0f
+        }
+
+        /** Текущий элемент для общих слушателей из init. */
+        private var currentWidgetItem: AppItem = AppItem.empty()
+
+        init {
             binding.root.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
                     android.view.MotionEvent.ACTION_DOWN -> {
@@ -1064,6 +1105,7 @@ class AppsAdapter(
             }
 
             binding.root.setOnLongClickListener {
+                val item = currentWidgetItem
                 if (onAppStartDrag != null) {
                     onAppStartDrag.invoke(item, binding.root, widgetDownRawX, widgetDownRawY)
                 } else {
