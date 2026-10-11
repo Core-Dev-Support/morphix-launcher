@@ -61,7 +61,7 @@ class DockController(
      * LinearLayoutManager, из-за чего в широком доке иконки прижимались
      * влево и справа оставалась пустая область.
      */
-    private fun applyDockLayout(style: DockStyle, iconCount: Int) {
+    private fun applyDockLayout(style: DockStyle, iconCount: Int = 1) {
         val rv = dockRv
         rv.layoutManager = if (style == DockStyle.FULL_WIDTH && iconCount > 1) {
             androidx.recyclerview.widget.GridLayoutManager(
