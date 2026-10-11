@@ -369,8 +369,13 @@ class MainActivity : AppCompatActivity() {
         insetsController.isAppearanceLightStatusBars = false
         insetsController.isAppearanceLightNavigationBars = false
 
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
         // Лаунчер работает edge-to-edge, поэтому док без учёта системных
-        // отступов уезжал под навигационную панель
+        // отступов уезжал под навигационную панель.
+        // ВАЖНО: слушатель ставится строго после binding — иначе обращение
+        // к lateinit-полю бросает исключение при каждом запуске.
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
@@ -379,9 +384,6 @@ class MainActivity : AppCompatActivity() {
             updateDockSpacing()
             insets
         }
-
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
 
         prefsManager = PreferencesManager(this)
         currentSettings = prefsManager.loadSettings()
@@ -4319,6 +4321,12 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
 
     private fun addSelectedWidget(info: android.appwidget.AppWidgetProviderInfo) {
         val newWidgetId = appWidgetHost.allocateAppWidgetId()
+        if (newWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
+            // Хост не смог выделить ID: обычно исчерпан лимит неудачных попыток,
+            // потому что ранее выделенные ID никогда не освобождались
+            Toast.makeText(this, "Не удалось выделить место для виджета", Toast.LENGTH_SHORT).show()
+            return
+        }
         val canBind = appWidgetManager.bindAppWidgetIdIfAllowed(newWidgetId, info.provider)
         if (!canBind) {
             val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
@@ -4330,6 +4338,11 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
                 return
             } catch (e: Exception) {
                 e.printStackTrace()
+                // экран привязки не открылся — освобождаем ID, иначе он утечёт
+                // и следующие попытки выделения тоже начнут падать
+                appWidgetHost.deleteAppWidgetId(newWidgetId)
+                Toast.makeText(this, "Не удалось добавить виджет", Toast.LENGTH_SHORT).show()
+                return
             }
         }
         proceedWithWidgetConfiguration(newWidgetId, info)
@@ -4368,6 +4381,8 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
             try {
                 startActivityForResult(configIntent, REQUEST_CREATE_APPWIDGET)
             } catch (e: Exception) {
+                // экран настройки не открылся — вешаем виджет сразу,
+                // иначе он просто пропадёт вместе с выделенным ID
                 attachWidgetToHome(appWidgetId)
             }
         } else {

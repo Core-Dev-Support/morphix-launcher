@@ -2,6 +2,7 @@ package com.naua_morphix_launcher.app
 
 import android.graphics.Rect
 import android.view.View
+import android.view.ViewGroup
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.naua_morphix_launcher.app.databinding.ActivityMainBinding
 import com.naua_morphix_launcher.app.model.AppItem
@@ -43,12 +44,39 @@ class DockController(
 
     init {
         dockRv.apply {
-            layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)
             adapter = this@DockController.adapter
             itemAnimator = null // перестановка в доке не должна мигать
             setHasFixedSize(true)
             isNestedScrollingEnabled = false
         }
+        applyDockLayout(DockStyle.FLOATING)
+    }
+
+    /**
+     * Раскладка дока.
+     *
+     * FLOATING — линейная, иконки идут встык внутри капсулы по центру экрана.
+     * FULL_WIDTH — сетка на столько колонок, сколько иконок: они
+     * распределяются равномерно по всей ширине. Раньше тут стоял обычный
+     * LinearLayoutManager, из-за чего в широком доке иконки прижимались
+     * влево и справа оставалась пустая область.
+     */
+    private fun applyDockLayout(style: DockStyle, iconCount: Int) {
+        val rv = dockRv
+        rv.layoutManager = if (style == DockStyle.FULL_WIDTH && iconCount > 1) {
+            androidx.recyclerview.widget.GridLayoutManager(
+                rv.context, iconCount, androidx.recyclerview.widget.GridLayoutManager.HORIZONTAL, false
+            )
+        } else {
+            LinearLayoutManager(rv.context, LinearLayoutManager.HORIZONTAL, false)
+        }
+        val lp = rv.layoutParams
+        lp.width = if (style == DockStyle.FULL_WIDTH) {
+            ViewGroup.LayoutParams.MATCH_PARENT
+        } else {
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        }
+        rv.layoutParams = lp
     }
 
     /** Пересобирает док из списка пакетов и текущего набора приложений. */
@@ -65,6 +93,7 @@ class DockController(
 
         adapter.updateConfig(settings.iconShape, settings.showLabels)
         adapter.submit(items)
+        applyDockLayout(settings.dockStyle, items.size.coerceAtLeast(1))
         applyVisibility(settings)
     }
 

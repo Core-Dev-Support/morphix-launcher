@@ -3,7 +3,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/dockCellRoot"
-    android:layout_width="56dp"
+    android:layout_width="50dp"
     android:layout_height="wrap_content"
     android:clipChildren="false"
     android:clipToPadding="false"
@@ -24,8 +24,8 @@
         android:orientation="vertical">
 
         <FrameLayout
-            android:layout_width="50dp"
-            android:layout_height="50dp">
+            android:layout_width="46dp"
+            android:layout_height="46dp">
 
             <com.google.android.material.imageview.ShapeableImageView
                 android:id="@+id/dockIcon"
@@ -62,7 +62,7 @@
             android:shadowDy="1"
             android:shadowRadius="3"
             android:textColor="#FFFFFF"
-            android:textSize="10sp" />
+            android:textSize="9sp" />
 
     </LinearLayout>
 
