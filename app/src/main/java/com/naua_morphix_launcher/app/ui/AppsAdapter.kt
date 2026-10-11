@@ -428,7 +428,7 @@ class AppsAdapter(
             val density = binding.root.resources.displayMetrics.density
 
             // Динамический адаптивный размер иконки под высоту ячейки сетки, чтобы подписи ВСЕГДА помещались
-            val finalIconSize: Int
+            var finalIconSize: Int
             if (itemHeight > 0) {
                 applyCellHeight(itemHeight)
                 val reservedForLabel = if (showLabels) (18 * density).toInt() else (4 * density).toInt()
@@ -440,6 +440,18 @@ class AppsAdapter(
                 )
             } else {
                 finalIconSize = (56 * density * iconScale).toInt().coerceIn((36 * density).toInt(), (72 * density).toInt())
+            }
+
+            // Ограничение по ширине колонки: раньше размер считался только от
+            // высоты строки, и при плотной сетке (8-10 колонок) иконки 52dp
+            // налезали друг на друга в 36dp-колонках.
+            val parentRv = binding.root.parent as? RecyclerView
+            val gridLm = parentRv?.layoutManager as? androidx.recyclerview.widget.GridLayoutManager
+            if (gridLm != null && parentRv.width > 0 && gridLm.spanCount > 0) {
+                val cellW = parentRv.width / gridLm.spanCount
+                val maxByWidth = (cellW - 8 * density).toInt()
+                    .coerceIn((24 * density).toInt(), finalIconSize)
+                if (maxByWidth < finalIconSize) finalIconSize = maxByWidth
             }
 
             val iconLp = binding.iconContainer.layoutParams

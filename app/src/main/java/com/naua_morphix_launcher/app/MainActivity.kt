@@ -2,7 +2,6 @@
 package com.naua_morphix_launcher.app
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.app.ActivityManager
 import android.app.Dialog
 import android.app.PendingIntent
@@ -193,6 +192,44 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupDock() {
+        // Тап по точкам страниц открывает меню приложений: жеста «свайп вверх»
+        // многие не находят, а точки — видимая цель.
+        binding.pageIndicatorLayout.setOnClickListener {
+            if (currentSettings.layoutMode == LayoutMode.DRAWER
+                && binding.glassAppDrawer.visibility != View.VISIBLE
+                && !isEditMode
+            ) {
+                binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+                openAppDrawer()
+            }
+        }
+
+        // Свайп вверх от дока тоже открывает меню: док перекрывает нижнюю
+        // часть экрана, и жест со стола через него не проходит.
+        var dockDownY = 0f
+        var dockDownX = 0f
+        binding.dockContainer.root.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    dockDownX = event.rawX
+                    dockDownY = event.rawY
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dy = event.rawY - dockDownY
+                    val dx = event.rawX - dockDownX
+                    if (dy < -60 && -dy > Math.abs(dx) * 1.2f
+                        && currentSettings.layoutMode == LayoutMode.DRAWER
+                        && binding.glassAppDrawer.visibility != View.VISIBLE
+                        && !isEditMode
+                    ) {
+                        openAppDrawer()
+                    }
+                }
+            }
+            // false — касание уходит дальше в RecyclerView дока (клики иконок)
+            false
+        }
+
         dockController = DockController(
             binding = binding,
             prefsManager = prefsManager,
@@ -417,8 +454,6 @@ class MainActivity : AppCompatActivity() {
         setupSpaceBadge()
         restoreInstalledWidgets()
         loadInstalledApps()
-        // запуск из системного пикера виджетов
-        handleWidgetIntent(intent)
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
@@ -441,40 +476,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Обрабатывает интенты системного пикера виджетов.
-     *
-     * Системный пикер (Samsung, Xiaomi, Google) не добавляет виджет сам — он
-     * отправляет домашнему экрану APPWIDGET_PICK / APPWIDGET_BIND. Без
-     * обработки пользователь видел «Не удалось добавить виджет».
+     * Идёт процесс привязки виджета (системный диалог BIND или экран
+     * настройки). Пока флаг поднят, хост виджетов нельзя останавливать:
+     * системный диалог открывается поверх лаунчера, лаунчер уходит в onStop,
+     * и после stopListening() привязка не завершается. Это и давало
+     * «Не удалось добавить виджет» на Samsung и Xiaomi даже при выданном
+     * разрешении.
      */
-    private fun handleWidgetIntent(intent: Intent?) {
-        val action = intent?.action ?: return
-        when (action) {
-            AppWidgetManager.ACTION_APPWIDGET_PICK -> {
-                // Открываем собственный пикер: он уже умеет фильтровать и
-                // показывать размер виджета
-                launchWidgetPicker()
-            }
-            AppWidgetManager.ACTION_APPWIDGET_BIND -> {
-                val widgetId = intent.getIntExtra(
-                    AppWidgetManager.EXTRA_APPWIDGET_ID,
-                    AppWidgetManager.INVALID_APPWIDGET_ID
-                )
-                if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    // система уже выдала согласие на привязку — вешаем виджет
-                    attachWidgetToHome(widgetId)
-                }
-                setResult(Activity.RESULT_OK, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId))
-                finish()
-            }
-        }
-    }
-
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        handleWidgetIntent(intent)
-    }
+    private var widgetBindInProgress = false
 
     override fun onStart() {
         super.onStart()
@@ -489,10 +498,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        // Хост намеренно НЕ останавливаем, если на рабочем столе есть виджеты:
-        // при открытии системного пикера лаунчер уходит в onStop, и после
-        // stopListening() система не может привязать виджет к этому хосту.
-        if (prefsManager.getAppWidgetIds().isEmpty()) {
+        // Хост останавливаем только когда привязка не идёт: иначе первый же
+        // виджет не привяжется — prefs ещё пуст, а диалог уже открыт.
+        if (!widgetBindInProgress && prefsManager.getAppWidgetIds().isEmpty()) {
             try {
                 appWidgetHost.stopListening()
             } catch (e: Exception) {
@@ -539,20 +547,34 @@ class MainActivity : AppCompatActivity() {
                     val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
                     if (appWidgetId != -1) {
                         configureWidgetOrAdd(appWidgetId)
+                    } else {
+                        widgetBindInProgress = false
                     }
                 }
                 REQUEST_BIND_APPWIDGET -> {
+                    // Флаг гасим до обработки: дальше путь сам его выставит,
+                    // если откроется экран настройки.
+                    widgetBindInProgress = false
                     val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
                     if (appWidgetId != -1) {
+                        // Хост мог пропустить событие привязки, пока был в фоне —
+                        // переслушиваем явно перед чтением info.
+                        try {
+                            appWidgetHost.startListening()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                         val info = appWidgetManager.getAppWidgetInfo(appWidgetId)
                         if (info != null) {
                             proceedWithWidgetConfiguration(appWidgetId, info)
                         } else {
                             appWidgetHost.deleteAppWidgetId(appWidgetId)
+                            Toast.makeText(this, "Виджет не привязался — попробуйте ещё раз", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
                 REQUEST_CREATE_APPWIDGET -> {
+                    widgetBindInProgress = false
                     val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
                     if (appWidgetId != -1) {
                         attachWidgetToHome(appWidgetId)
@@ -560,6 +582,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         } else if (resultCode == RESULT_CANCELED) {
+            widgetBindInProgress = false
             val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
             if (appWidgetId != -1) {
                 appWidgetHost.deleteAppWidgetId(appWidgetId)
@@ -593,16 +616,30 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun applySettingsChanges() {
-        setupGlassmorphism()
-
-        val spanCount = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+    /**
+     * Число колонок меню приложений.
+     *
+     * Раньше drawer повторял настройку рабочего стола 1:1 (+2 в ландшафте),
+     * и при сетке 10x10 получалось 10-12 колонок: иконки 56dp не влезали в
+     * 30dp-колонку, подписи обрезались до 3 букв. Теперь считаем от ширины
+     * экрана: минимум 72dp на колонку (иконка + отступы), но не больше
+     * настройки пользователя и не меньше 4.
+     */
+    private fun drawerColumnCount(): Int {
+        val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
+        val fitColumns = (widthDp / 72f).toInt().coerceAtLeast(4)
+        val wanted = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             currentSettings.gridColumns + 2
         } else {
             currentSettings.gridColumns
         }
+        return wanted.coerceIn(4, fitColumns.coerceAtLeast(4))
+    }
 
-        binding.appsRecyclerView.layoutManager = GridLayoutManager(this, spanCount)
+    private fun applySettingsChanges() {
+        setupGlassmorphism()
+
+        binding.appsRecyclerView.layoutManager = GridLayoutManager(this, drawerColumnCount())
 
         drawerAppsAdapter.updateConfig(
             shape = currentSettings.iconShape,
@@ -2999,12 +3036,11 @@ private fun isLowEndDevice(): Boolean {
     }
 
     /** Прячет док на время, когда он перекрыт меню приложений или режимом правки. */
-    private fun setDockInteractionEnabled(enabled: Boolean) {
+        private fun setDockInteractionEnabled(enabled: Boolean) {
         if (!::dockController.isInitialized) return
         val root = binding.dockContainer.root
-        val shouldBeVisible = enabled
-                && currentSettings.isDockEnabled
-                && currentSettings.layoutMode == LayoutMode.DRAWER
+        // Док виден в обоих режимах раскладки — gate только по настройке дока.
+        val shouldBeVisible = enabled && currentSettings.isDockEnabled
         if (shouldBeVisible) {
             dockController.applyVisibility(currentSettings)
         } else {
@@ -4364,26 +4400,49 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     }
 
     private fun addSelectedWidget(info: android.appwidget.AppWidgetProviderInfo) {
+        // Часть OEM-виджетов (Samsung, Xiaomi) требует, чтобы лаунчер был
+        // домашним экраном по умолчанию — иначе система молча режет привязку.
+        if (!isDefaultLauncher()) {
+            Toast.makeText(
+                this,
+                "Сначала выберите Morphix домашним экраном — иначе система не даёт привязать виджет",
+                Toast.LENGTH_LONG
+            ).show()
+            showSetDefaultLauncherDialog()
+            return
+        }
+
         val newWidgetId = appWidgetHost.allocateAppWidgetId()
         if (newWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
-            // Хост не смог выделить ID: обычно исчерпан лимит неудачных попыток,
-            // потому что ранее выделенные ID никогда не освобождались
             Toast.makeText(this, "Не удалось выделить место для виджета", Toast.LENGTH_SHORT).show()
             return
         }
-        val canBind = appWidgetManager.bindAppWidgetIdIfAllowed(newWidgetId, info.provider)
+        val canBind = try {
+            appWidgetManager.bindAppWidgetIdIfAllowed(newWidgetId, info.provider)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
         if (!canBind) {
             val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, newWidgetId)
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
             }
+            // Проверяем, что системный диалог вообще есть: раньше интент мог
+            // резолвиться в нас самих (был лишний intent-filter), и тогда
+            // singleTask-активити не возвращала результат.
+            if (bindIntent.resolveActivity(packageManager) == null) {
+                appWidgetHost.deleteAppWidgetId(newWidgetId)
+                Toast.makeText(this, "Система не отвечает на запрос привязки виджета", Toast.LENGTH_SHORT).show()
+                return
+            }
+            widgetBindInProgress = true
             try {
                 startActivityForResult(bindIntent, REQUEST_BIND_APPWIDGET)
                 return
             } catch (e: Exception) {
                 e.printStackTrace()
-                // экран привязки не открылся — освобождаем ID, иначе он утечёт
-                // и следующие попытки выделения тоже начнут падать
+                widgetBindInProgress = false
                 appWidgetHost.deleteAppWidgetId(newWidgetId)
                 Toast.makeText(this, "Не удалось добавить виджет", Toast.LENGTH_SHORT).show()
                 return
@@ -4395,21 +4454,38 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     private fun configureWidgetOrAdd(appWidgetId: Int) {
         val appWidgetInfo = appWidgetManager.getAppWidgetInfo(appWidgetId)
         if (appWidgetInfo == null) {
+            // После диалога привязки провайдер ещё не виден — не удаляем ID
+            // сразу, а пробуем дождаться привязки повторным чтением.
+            widgetBindInProgress = false
             appWidgetHost.deleteAppWidgetId(appWidgetId)
+            Toast.makeText(this, "Виджет не привязался — попробуйте ещё раз", Toast.LENGTH_SHORT).show()
             return
         }
 
-        val canBind = appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, appWidgetInfo.provider)
+        val canBind = try {
+            appWidgetManager.bindAppWidgetIdIfAllowed(appWidgetId, appWidgetInfo.provider)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
         if (!canBind) {
             val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, appWidgetInfo.provider)
             }
+            if (bindIntent.resolveActivity(packageManager) == null) {
+                widgetBindInProgress = false
+                appWidgetHost.deleteAppWidgetId(appWidgetId)
+                Toast.makeText(this, "Система не отвечает на запрос привязки виджета", Toast.LENGTH_SHORT).show()
+                return
+            }
+            widgetBindInProgress = true
             try {
                 startActivityForResult(bindIntent, REQUEST_BIND_APPWIDGET)
                 return
             } catch (e: Exception) {
                 e.printStackTrace()
+                widgetBindInProgress = false
             }
         }
 
@@ -4422,9 +4498,11 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
                 component = appWidgetInfo.configure
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
             }
+            widgetBindInProgress = true
             try {
                 startActivityForResult(configIntent, REQUEST_CREATE_APPWIDGET)
             } catch (e: Exception) {
+                widgetBindInProgress = false
                 // экран настройки не открылся — вешаем виджет сразу,
                 // иначе он просто пропадёт вместе с выделенным ID
                 attachWidgetToHome(appWidgetId)
@@ -4855,13 +4933,7 @@ private var editModeOpenedAt = 0L
     }
 
     private fun setupAppDrawer() {
-        val columns = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            currentSettings.gridColumns + 2
-        } else {
-            currentSettings.gridColumns
-        }
-
-        binding.appsRecyclerView.layoutManager = GridLayoutManager(this, columns)
+        binding.appsRecyclerView.layoutManager = GridLayoutManager(this, drawerColumnCount())
         // Без этого каждый бейдж уведомления запускал DefaultItemAnimator
         // с кросс-фейдом и рендером ячейки в offscreen-слой — прямой источник
         // jank на слабом GPU

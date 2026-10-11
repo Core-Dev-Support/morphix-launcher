@@ -62,25 +62,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 3. Системный пикер виджетов отправляет эти интенты домашнему экрану.
-                 Без них виджет невозможно добавить из системного пикера:
-                 система не находит получателя и показывает
-                 «Не удалось добавить виджет». -->
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_PICK" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_BIND" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-
-            <!-- 4. Запрос на закрепление виджета (Android 8+ requestPinAppWidget) -->
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
+            <!-- НЕ объявляем APPWIDGET_PICK/BIND/CONFIGURE фильтры.
+                 MainActivity у нас singleTask, а singleTask-активити не может
+                 возвращать результат через startActivityForResult. Если объявить
+                 фильтр APPWIDGET_BIND, наш же интент привязки резолвится в самих
+                 себя вместо системного диалога — привязка не проходит ни на
+                 Samsung, ни на Xiaomi, и виджет не добавляется. Системный диалог
+                 привязки вызывается явным интентом из addSelectedWidget(). -->
         </activity>
 
         <!-- Служба специальных возможностей для блокировки экрана по тапу -->

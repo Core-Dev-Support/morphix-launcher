@@ -56,17 +56,16 @@ class DockController(
      * Раскладка дока.
      *
      * FLOATING — линейная, иконки идут встык внутри капсулы по центру экрана.
-     * FULL_WIDTH — сетка на столько колонок, сколько иконок: они
-     * распределяются равномерно по всей ширине. Раньше тут стоял обычный
-     * LinearLayoutManager, из-за чего в широком доке иконки прижимались
-     * влево и справа оставалась пустая область.
+     * FULL_WIDTH — сетка в одну строку на столько колонок, сколько иконок:
+     * они распределяются равномерно по всей ширине. ВАЖНО: GridLayoutManager
+     * нужен с VERTICAL ориентацией (spanCount = число колонок). С HORIZONTAL
+     * spanCount означает число строк, и 4 иконки вставали вертикальным
+     * столбцом на пол-экрана.
      */
     private fun applyDockLayout(style: DockStyle, iconCount: Int = 1) {
         val rv = dockRv
         rv.layoutManager = if (style == DockStyle.FULL_WIDTH && iconCount > 1) {
-            androidx.recyclerview.widget.GridLayoutManager(
-                rv.context, iconCount, androidx.recyclerview.widget.GridLayoutManager.HORIZONTAL, false
-            )
+            androidx.recyclerview.widget.GridLayoutManager(rv.context, iconCount)
         } else {
             LinearLayoutManager(rv.context, LinearLayoutManager.HORIZONTAL, false)
         }
@@ -100,14 +99,13 @@ class DockController(
     /**
      * Показывает/скрывает док и применяет стиль.
      *
-     * Док скрыт в режиме CLASSIC: там все приложения уже лежат на экранах,
-     * а меню приложений не открывается свайпом, поэтому док только занимает место.
+     * Док виден и в CLASSIC, и в DRAWER: в MIUI док есть в обоих режимах.
+     * Раньше док прятался в CLASSIC — это и была жалоба «док пропал».
      */
     fun applyVisibility(settings: LauncherSettings) {
         val root = binding.dockContainer.root
         val shouldShow = settings.isDockEnabled
                 && settings.dockIconCount > 0
-                && settings.layoutMode == LayoutMode.DRAWER
 
         if (shouldShow && root.visibility != View.VISIBLE) {
             root.visibility = View.VISIBLE
