@@ -1,4 +1,4 @@
-﻿package com.naua_morphix_launcher.app.ui
+package com.naua_morphix_launcher.app.ui
 
 import android.graphics.Canvas
 import android.view.LayoutInflater

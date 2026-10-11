@@ -1,4 +1,4 @@
-﻿package com.naua_morphix_launcher.app.ui
+package com.naua_morphix_launcher.app.ui
 
 import android.app.AlertDialog
 import android.content.Context

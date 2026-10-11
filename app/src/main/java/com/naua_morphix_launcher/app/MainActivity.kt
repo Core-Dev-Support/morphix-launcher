@@ -1,4 +1,4 @@
-﻿@file:Suppress("DEPRECATION")
+@file:Suppress("DEPRECATION")
 package com.naua_morphix_launcher.app
 
 import android.annotation.SuppressLint
