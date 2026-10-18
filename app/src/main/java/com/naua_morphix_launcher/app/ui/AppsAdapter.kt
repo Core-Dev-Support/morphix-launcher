@@ -593,7 +593,9 @@ class AppsAdapter(
                     dm.widthPixels - parentRv.paddingLeft - parentRv.paddingRight
                 }
                 val cellW = totalW / gridLm.spanCount
-                val maxByWidth = (cellW - 8 * density).toInt()
+                // 6dp вместо 8dp: в плотной сетке (8-10 колонок) каждый dp
+                // значка на счету, а сквиркл всё равно меньше ячейки.
+                val maxByWidth = (cellW - 6 * density).toInt()
                     .coerceIn((24 * density).toInt(), finalIconSize)
                 if (maxByWidth < finalIconSize) finalIconSize = maxByWidth
             }
@@ -1014,6 +1016,10 @@ class AppsAdapter(
                 && widgetId == attachedWidgetId
                 && attachedHostView?.parent === binding.widgetHostHolder
             ) {
+                // Размер ячейки мог измениться (рефактор сетки) — обновляем
+                // options и здесь, не только после первого добавления.
+                (attachedHostView as? android.appwidget.AppWidgetHostView)
+                    ?.let { postUpdateWidgetOptions(widgetId, it) }
                 return
             }
 
@@ -1031,6 +1037,8 @@ class AppsAdapter(
                     binding.widgetHostHolder.addView(hostView, lp)
                     attachedWidgetId = widgetId
                     attachedHostView = hostView
+                    (hostView as? android.appwidget.AppWidgetHostView)
+                        ?.let { postUpdateWidgetOptions(widgetId, it) }
 
                     (hostView as? MorphixAppWidgetHostView)?.onWidgetLongClick = { rawX, rawY ->
                         if (onAppStartDrag != null) {
@@ -1080,6 +1088,33 @@ class AppsAdapter(
 
         /** Текущий элемент для общих слушателей из init. */
         private var currentWidgetItem: AppItem = AppItem.empty()
+
+        /**
+         * Передаёт провайдеру фактические размеры ячейки в dp.
+         *
+         * Без updateAppWidgetSize провайдер никогда не получает
+         * OPTIONS_CHANGED: виджеты, чьи RemoteViews зависят от размера
+         * (календари, погода, часы, поисковые строки), рисуют дефолтный
+         * layout или пустуют — пользователь видел это как «не все
+         * виджеты загружаются».
+         */
+        private fun postUpdateWidgetOptions(widgetId: Int, hostView: android.appwidget.AppWidgetHostView) {
+            binding.widgetHostHolder.post {
+                if (attachedWidgetId != widgetId) return@post
+                val holder = binding.widgetHostHolder
+                val w = holder.width
+                val h = holder.height
+                if (w <= 0 || h <= 0) return@post
+                val density = holder.resources.displayMetrics.density
+                val minW = (w / density).toInt().coerceAtLeast(1)
+                val minH = (h / density).toInt().coerceAtLeast(1)
+                try {
+                    hostView.updateAppWidgetSize(null, minW, minH, minW, minH)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
 
         init {
             binding.root.setOnTouchListener { v, event ->

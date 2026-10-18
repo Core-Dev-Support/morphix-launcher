@@ -34,6 +34,17 @@ class DockAdapter(
     private var iconShape: IconShape = IconShape.SQUIRCLE
     private var showLabels: Boolean = true
 
+    /**
+     * FULL_WIDTH-режим: ячейка обязана растянуться на весь спан GridLayoutManager.
+     *
+     * Раньше ширина ячейки была захардкожена в 50dp: GridLayoutManager
+     * измеряет ребёнка с lp.width > 0 как EXACTLY(50dp), и иконка
+     * прилипала к ЛЕВОМУ краю своей трети-спана — при 3 иконках они
+     * выстраивались «слева, левее середины, левее конца», вместо
+     * равномерной раскладки по центру слотов.
+     */
+    private var fullWidthCells: Boolean = false
+
     fun submit(newItems: List<AppItem>) {
         items.clear()
         items.addAll(newItems)
@@ -57,10 +68,11 @@ class DockAdapter(
         }
     }
 
-    fun updateConfig(shape: IconShape, labels: Boolean) {
-        if (iconShape == shape && showLabels == labels) return
+    fun updateConfig(shape: IconShape, labels: Boolean, fullWidth: Boolean = fullWidthCells) {
+        if (iconShape == shape && showLabels == labels && fullWidthCells == fullWidth) return
         iconShape = shape
         showLabels = labels
+        fullWidthCells = fullWidth
         notifyDataSetChanged()
     }
 
@@ -98,6 +110,19 @@ class DockAdapter(
 
         fun bind(item: AppItem) {
             cancelPendingDrag()
+            // Ширина ячейки: 50dp в плавающей капсуле, Match_Parent по всему
+            // спану в режиме FULL_WIDTH (GridLayoutManager сам делит ширину
+            // поровну, иконка центрируется через gravity разметки).
+            val lp = binding.root.layoutParams
+            val targetWidth = if (fullWidthCells) {
+                ViewGroup.LayoutParams.MATCH_PARENT
+            } else {
+                (50 * binding.root.resources.displayMetrics.density).toInt()
+            }
+            if (lp.width != targetWidth) {
+                lp.width = targetWidth
+                binding.root.layoutParams = lp
+            }
             binding.dockDropTarget.visibility = View.GONE
             binding.dockIcon.setImageDrawable(item.icon)
             binding.dockIcon.shapeAppearanceModel = AppsAdapter.getShapeModel(iconShape)

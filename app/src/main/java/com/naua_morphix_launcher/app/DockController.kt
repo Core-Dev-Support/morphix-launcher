@@ -60,12 +60,13 @@ class DockController(
      * они распределяются равномерно по всей ширине. ВАЖНО: GridLayoutManager
      * нужен с VERTICAL ориентацией (spanCount = число колонок). С HORIZONTAL
      * spanCount означает число строк, и 4 иконки вставали вертикальным
-     * столбцом на пол-экрана.
+     * столбцом на пол-экрана. Теперь сетка включается и для одной иконки,
+     * иначе единственная 50dp-ячейка прилипала к левому краю панели.
      */
     private fun applyDockLayout(style: DockStyle, iconCount: Int = 1) {
         val rv = dockRv
-        rv.layoutManager = if (style == DockStyle.FULL_WIDTH && iconCount > 1) {
-            androidx.recyclerview.widget.GridLayoutManager(rv.context, iconCount)
+        rv.layoutManager = if (style == DockStyle.FULL_WIDTH) {
+            androidx.recyclerview.widget.GridLayoutManager(rv.context, iconCount.coerceAtLeast(1))
         } else {
             LinearLayoutManager(rv.context, LinearLayoutManager.HORIZONTAL, false)
         }
@@ -102,7 +103,7 @@ class DockController(
             .filter { it.packageName !in hiddenPackages }
             .take(settings.dockIconCount.coerceAtLeast(0))
 
-        adapter.updateConfig(settings.iconShape, settings.showLabels)
+        adapter.updateConfig(settings.iconShape, settings.showLabels, settings.dockStyle == DockStyle.FULL_WIDTH)
         adapter.submit(items)
         applyDockLayout(settings.dockStyle, items.size.coerceAtLeast(1))
         applyVisibility(settings)

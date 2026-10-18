@@ -92,7 +92,12 @@ object AppLoader {
                                 }
                                 if (icon == null) {
                                     icon = activity.getBadgedIcon(context.resources.configuration.densityDpi)
-                                    if (icon != null) iconCache.put(sig, icon)
+                                    // Легаси-иконки на тарелку Gwen: иначе они «врастают»
+                                    // в края сквиркла и выглядят крупнее адаптивных соседей.
+                                    if (icon != null) {
+                                        icon = IconNormalizer.normalize(icon)
+                                        iconCache.put(sig, icon)
+                                    }
                                 }
                             }
 
@@ -152,6 +157,9 @@ object AppLoader {
                         null
                     }
                     if (icon != null) {
+                        // Та же нормализация оптического размера, что выше:
+                        // фолбэк-ветка иначе показывала legacy-иконки «огромными».
+                        icon = IconNormalizer.normalize(icon)
                         iconCache.put(sig, icon)
                     }
                 }

@@ -4552,8 +4552,46 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
         container.visibility = View.GONE
     }
 
+    /**
+     * Прикрепляет уже привязанный виджет к домашнему экрану.
+     *
+     * Раньше при getAppWidgetInfo == null (system_server ещё не опубликовал
+     * привязку) метод вылетал БЕЗ звука: тоста не было, виджет не появлялся,
+     * выделенный ID зависал — половина жалобы «виджет то не добавляется».
+     * Теперь короткое ожидание привязки и честное сообщение о неудаче.
+     */
     private fun attachWidgetToHome(appWidgetId: Int) {
-        if (appWidgetManager.getAppWidgetInfo(appWidgetId) == null) return
+        if (appWidgetManager.getAppWidgetInfo(appWidgetId) == null) {
+            lifecycleScope.launch {
+                var bound = false
+                for (attempt in 0 until 10) {
+                    kotlinx.coroutines.delay(120)
+                    if (appWidgetManager.getAppWidgetInfo(appWidgetId) != null) {
+                        bound = true
+                        break
+                    }
+                }
+                if (bound) {
+                    doAttachWidgetToHome(appWidgetId)
+                } else {
+                    try {
+                        appWidgetHost.deleteAppWidgetId(appWidgetId)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Виджет не привязался — попробуйте ещё раз",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+            return
+        }
+        doAttachWidgetToHome(appWidgetId)
+    }
+
+    private fun doAttachWidgetToHome(appWidgetId: Int) {
         val oldId = replacingWidgetId
         replacingWidgetId = null
 
