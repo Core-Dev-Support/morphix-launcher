@@ -1007,7 +1007,11 @@ private fun isLowEndDevice(): Boolean {
                     return true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    handleDragEnd(ev.rawX, ev.rawY)
+                    if (ev.actionMasked == MotionEvent.ACTION_CANCEL && isDraggingFromDock) {
+                        cancelDockDrag()
+                    } else {
+                        handleDragEnd(ev.rawX, ev.rawY)
+                    }
                     return true
                 }
             }
@@ -1024,6 +1028,15 @@ private fun isLowEndDevice(): Boolean {
                     return true
                 }
             }
+        }
+
+        // Удержание на доке резервирует последующее движение за Dock drag,
+        // иначе первый быстрый MOVE вверх открыл бы Drawer раньше дочерней ячейки.
+        if (swipeTracking && !isDraggingDesktopItem && ::dockController.isInitialized &&
+            dockController.contains(swipeStartX, swipeStartY) &&
+            SystemClock.uptimeMillis() - swipeStartTime >= android.view.ViewConfiguration.getLongPressTimeout()
+        ) {
+            swipeTracking = false
         }
 
         // Универсальный свайп вверх для открытия меню приложений из любой точки экрана:
@@ -1228,7 +1241,7 @@ private fun isLowEndDevice(): Boolean {
         dragSourcePageIndex = binding.homeViewPager.currentItem
         dragStartRawX = rawX
         dragStartRawY = rawY
-        hasMovedSignificantDistance = false
+        hasMovedSignificantDistance = fromDock
         lastPageSwitchTime = SystemClock.uptimeMillis()
 
         desktopPagerAdapter.setDraggedItemPackage(item.packageName)
@@ -2224,6 +2237,14 @@ private fun isLowEndDevice(): Boolean {
 
         resetDragState()
         binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+    }
+
+    private fun cancelDockDrag() {
+        if (!isDraggingFromDock) return
+        binding.dragOverlayContainer.visibility = View.GONE
+        binding.floatingDragView.visibility = View.GONE
+        binding.floatingWidgetDragView.visibility = View.GONE
+        resetDragState()
     }
 
     private fun placeItemAtOrdered(ordered: MutableList<String>, sourceKey: String, sourceIdx: Int, targetIdx: Int) {
@@ -5200,9 +5221,10 @@ private var editModeOpenedAt = 0L
 
     private fun filterAppsBySpace(isSecond: Boolean) {
         isSecondSpaceActive = isSecond
+        val secondSpacePackages = prefsManager.getSecondSpacePackages()
         val visibleApps = allApps.filter {
             !currentSettings.hiddenPackages.contains(it.packageName) &&
-            (it.isSecondSpace == isSecond || (isSecond && prefsManager.getSecondSpacePackages().contains(it.packageName)))
+            (it.isSecondSpace == isSecond || (isSecond && it.packageName in secondSpacePackages))
         }
         drawerAppsAdapter.submitList(visibleApps)
     }

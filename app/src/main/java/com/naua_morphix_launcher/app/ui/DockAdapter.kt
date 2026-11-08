@@ -7,6 +7,7 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewConfiguration
 import androidx.recyclerview.widget.RecyclerView
 import com.naua_morphix_launcher.app.databinding.ItemDockIconBinding
 import com.naua_morphix_launcher.app.model.AppItem
@@ -99,13 +100,19 @@ class DockAdapter(
     inner class DockViewHolder(private val binding: ItemDockIconBinding) :
         RecyclerView.ViewHolder(binding.root) {
 
+        private enum class GestureState { IDLE, PRESSED, LONG_PRESS_ARMED, DRAGGING, CANCELLED }
+
+        private var gestureState = GestureState.IDLE
         private var downRawX = 0f
         private var downRawY = 0f
-        private var pendingDrag: Runnable? = null
+        private var downItem: AppItem? = null
+        private var pendingLongPress: Runnable? = null
 
         fun cancelPendingDrag() {
-            pendingDrag?.let { TOUCH_HANDLER.removeCallbacks(it) }
-            pendingDrag = null
+            pendingLongPress?.let { TOUCH_HANDLER.removeCallbacks(it) }
+            pendingLongPress = null
+            gestureState = GestureState.IDLE
+            downItem = null
         }
 
         fun bind(item: AppItem) {
@@ -138,25 +145,63 @@ class DockAdapter(
             }
 
             binding.root.setOnClickListener { onAppClick(item) }
-            binding.root.setOnLongClickListener {
-                onAppLongClick?.invoke(item, binding.root)
-                true
-            }
+            binding.root.setOnLongClickListener(null)
 
             binding.root.setOnTouchListener { v, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
+                        cancelPendingDrag()
+                        gestureState = GestureState.PRESSED
+                        downItem = item
                         downRawX = event.rawX
                         downRawY = event.rawY
-                        pendingDrag = Runnable {
-                            onDockItemStartDrag?.invoke(item, binding.root, downRawX, downRawY)
+                        pendingLongPress = Runnable {
+                            if (gestureState == GestureState.PRESSED) {
+                                gestureState = GestureState.LONG_PRESS_ARMED
+                            }
                         }
-                        TOUCH_HANDLER.postDelayed(pendingDrag!!, 200)
+                        TOUCH_HANDLER.postDelayed(
+                            pendingLongPress!!,
+                            ViewConfiguration.getLongPressTimeout().toLong()
+                        )
                     }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL,
-                    MotionEvent.ACTION_MOVE -> cancelPendingDrag()
+                    MotionEvent.ACTION_MOVE -> {
+                        if (gestureState == GestureState.PRESSED || gestureState == GestureState.LONG_PRESS_ARMED) {
+                            val touchSlop = ViewConfiguration.get(v.context).scaledTouchSlop
+                            val moved = kotlin.math.abs(event.rawX - downRawX) > touchSlop ||
+                                kotlin.math.abs(event.rawY - downRawY) > touchSlop
+                            if (moved) {
+                                pendingLongPress?.let { TOUCH_HANDLER.removeCallbacks(it) }
+                                pendingLongPress = null
+                                if (gestureState == GestureState.LONG_PRESS_ARMED) {
+                                    val pressedItem = downItem
+                                    gestureState = GestureState.DRAGGING
+                                    if (pressedItem != null && onDockItemStartDrag != null) {
+                                        onDockItemStartDrag.invoke(pressedItem, binding.root, event.rawX, event.rawY)
+                                    } else {
+                                        gestureState = GestureState.CANCELLED
+                                    }
+                                } else {
+                                    gestureState = GestureState.CANCELLED
+                                }
+                            }
+                        }
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        val pressedItem = downItem
+                        when (gestureState) {
+                            GestureState.PRESSED -> v.performClick()
+                            GestureState.LONG_PRESS_ARMED -> {
+                                v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                                if (pressedItem != null) onAppLongClick?.invoke(pressedItem, binding.root)
+                            }
+                            else -> Unit
+                        }
+                        cancelPendingDrag()
+                    }
+                    MotionEvent.ACTION_CANCEL -> cancelPendingDrag()
                 }
-                false
+                true
             }
         }
     }
