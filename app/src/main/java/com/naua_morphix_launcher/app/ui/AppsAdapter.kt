@@ -39,6 +39,15 @@ class AppsAdapter(
     private var smoothAnimations: Boolean = true
     private var badgeCounts: Map<String, Int> = emptyMap()
         private set
+
+    /** Количество колонок сетки для точного расчёта ширины ячеек и подбора размера иконки. */
+    var spanCount: Int = 4
+        set(value) {
+            if (field != value && value > 0) {
+                field = value
+                notifyDataSetChanged()
+            }
+        }
         
     /**
      * Стабильный ключ элемента. packageName недостаточно: один и тот же пакет
@@ -583,20 +592,25 @@ class AppsAdapter(
             // налезали друг на друга в 36dp-колонках.
             // Если список ещё не разложен (width == 0 на первом кадре),
             // считаем от ширины экрана, а не пропускаем ограничение.
+            // Ограничение по ширине колонки: раньше размер считался только от
+            // высоты строки, и при плотной сетке (8-10 колонок) иконки 52dp
+            // налезали друг на друга в 36dp-колонках.
+            // При биндинге binding.root.parent часто null (ещё не добавлен в RecyclerView),
+            // поэтому spanCount передаётся напрямую в адаптер, а fallback берётся из layoutManager.
             val parentRv = binding.root.parent as? RecyclerView
             val gridLm = parentRv?.layoutManager as? androidx.recyclerview.widget.GridLayoutManager
-            if (gridLm != null && gridLm.spanCount > 0) {
-                val totalW = if (parentRv.width > 0) {
+            val columns = if (spanCount > 0) spanCount else (gridLm?.spanCount ?: 4)
+            if (columns > 0) {
+                val totalW = if (parentRv != null && parentRv.width > 0) {
                     parentRv.width - parentRv.paddingLeft - parentRv.paddingRight
                 } else {
                     val dm = binding.root.resources.displayMetrics
-                    dm.widthPixels - parentRv.paddingLeft - parentRv.paddingRight
+                    dm.widthPixels - (parentRv?.paddingLeft ?: 0) - (parentRv?.paddingRight ?: 0)
                 }
-                val cellW = totalW / gridLm.spanCount
-                // 6dp вместо 8dp: в плотной сетке (8-10 колонок) каждый dp
-                // значка на счету, а сквиркл всё равно меньше ячейки.
+                val cellW = totalW / columns
+                // 6dp отступ от краёв ячейки, чтобы сквирклы соседних колонок не слипались
                 val maxByWidth = (cellW - 6 * density).toInt()
-                    .coerceIn((24 * density).toInt(), finalIconSize)
+                    .coerceIn((20 * density).toInt(), finalIconSize)
                 if (maxByWidth < finalIconSize) finalIconSize = maxByWidth
             }
 
@@ -738,8 +752,15 @@ class AppsAdapter(
                 // setText с тем же текстом всё равно проходит layout — проверяем
                 if (binding.appLabel.text.toString() != item.label) binding.appLabel.text = item.label
                 // setTextSize безусловно дёргает requestLayout() на каждой ячейке
-                val labelSp = if (itemHeight > 0 && itemHeight < 72 * density) 10.5f else 11.5f
-                if (binding.appLabel.textSize != labelSp) binding.appLabel.textSize = labelSp
+                val labelSp = when {
+                    columns >= 8 -> 9.5f
+                    columns >= 6 || (itemHeight > 0 && itemHeight < 72 * density) -> 10.5f
+                    else -> 11.5f
+                }
+                val currentSp = binding.appLabel.textSize / binding.root.resources.displayMetrics.scaledDensity
+                if (Math.abs(currentSp - labelSp) > 0.1f) {
+                    binding.appLabel.textSize = labelSp
+                }
 
                 if (item.isFolder) {
                     // Превью папки 2x2

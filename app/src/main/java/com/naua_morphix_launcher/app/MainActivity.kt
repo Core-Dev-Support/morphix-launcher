@@ -136,6 +136,12 @@ class MainActivity : AppCompatActivity() {
     /** Курсор над доком во время перетаскивания — док подсвечен. */
     private var isHoveringDock = false
 
+    /** Разрешено ли доку отображаться (блокируется меню приложений и режимом правки). */
+    private var isDockInteractionAllowed = true
+
+    /** ID виджета, находящегося в процессе привязки/настройки. */
+    private var pendingWidgetId: Int = android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID
+
     /** Высота системной навигационной панели в пикселях. */
     private var dockBottomInset = 0
 
@@ -245,7 +251,8 @@ class MainActivity : AppCompatActivity() {
             },
             onStartDragFromDock = { item, view, x, y ->
                 startDesktopDrag(item, view, x, y, fromDock = true)
-            }
+            },
+            canShowDock = { isDockInteractionAllowed && !isEditMode && binding.glassAppDrawer.visibility != View.VISIBLE }
         )
     }
 
@@ -526,7 +533,8 @@ class MainActivity : AppCompatActivity() {
         if (resultCode == RESULT_OK) {
             when (requestCode) {
                 REQUEST_PICK_APPWIDGET -> {
-                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
+                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+                        ?.takeIf { it != -1 } ?: pendingWidgetId
                     if (appWidgetId != -1) {
                         configureWidgetOrAdd(appWidgetId)
                     } else {
@@ -537,7 +545,8 @@ class MainActivity : AppCompatActivity() {
                     // Флаг гасим до обработки: дальше путь сам его выставит,
                     // если откроется экран настройки.
                     widgetBindInProgress = false
-                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
+                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+                        ?.takeIf { it != -1 } ?: pendingWidgetId
                     if (appWidgetId != -1) {
                         // Хост мог пропустить событие привязки, пока был в фоне —
                         // переслушиваем явно перед чтением info.
@@ -551,13 +560,15 @@ class MainActivity : AppCompatActivity() {
                             proceedWithWidgetConfiguration(appWidgetId, info)
                         } else {
                             appWidgetHost.deleteAppWidgetId(appWidgetId)
+                            pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
                             Toast.makeText(this, "Виджет не привязался — попробуйте ещё раз", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
                 REQUEST_CREATE_APPWIDGET -> {
                     widgetBindInProgress = false
-                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
+                    val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+                        ?.takeIf { it != -1 } ?: pendingWidgetId
                     if (appWidgetId != -1) {
                         attachWidgetToHome(appWidgetId)
                     }
@@ -565,10 +576,12 @@ class MainActivity : AppCompatActivity() {
             }
         } else if (resultCode == RESULT_CANCELED) {
             widgetBindInProgress = false
-            val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1) ?: -1
+            val appWidgetId = data?.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+                ?.takeIf { it != -1 } ?: pendingWidgetId
             if (appWidgetId != -1) {
                 appWidgetHost.deleteAppWidgetId(appWidgetId)
             }
+            pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
             replacingWidgetId = null
         }
     }
@@ -621,7 +634,9 @@ class MainActivity : AppCompatActivity() {
     private fun applySettingsChanges() {
         setupGlassmorphism()
 
-        binding.appsRecyclerView.layoutManager = GridLayoutManager(this, drawerColumnCount())
+        val columns = drawerColumnCount()
+        binding.appsRecyclerView.layoutManager = GridLayoutManager(this, columns)
+        drawerAppsAdapter.spanCount = columns
 
         drawerAppsAdapter.updateConfig(
             shape = currentSettings.iconShape,
@@ -3022,14 +3037,16 @@ private fun isLowEndDevice(): Boolean {
     }
 
     /** Прячет док на время, когда он перекрыт меню приложений или режимом правки. */
-        private fun setDockInteractionEnabled(enabled: Boolean) {
+    private fun setDockInteractionEnabled(enabled: Boolean) {
+        isDockInteractionAllowed = enabled
         if (!::dockController.isInitialized) return
         val root = binding.dockContainer.root
-        // Док виден в обоих режимах раскладки — gate только по настройке дока.
-        val shouldBeVisible = enabled && currentSettings.isDockEnabled
+        // Док виден в обоих режимах раскладки — gate только по настройке дока и состоянию экрана.
+        val shouldBeVisible = enabled && !isEditMode && binding.glassAppDrawer.visibility != View.VISIBLE && currentSettings.isDockEnabled && currentSettings.dockIconCount > 0
         if (shouldBeVisible) {
             dockController.applyVisibility(currentSettings)
         } else {
+            root.animate().cancel()
             root.visibility = View.GONE
         }
         updateDockSpacing()
@@ -3236,8 +3253,10 @@ private fun isLowEndDevice(): Boolean {
 
         // Настройка стекла применяется ко всем стеклянным вьюхам в setupGlassmorphism();
         // здесь только показываем кнопки режима редактирования.
-        // Док прячем: в режиме правки он мешал бы перетаскиванию иконок с сетки в док.
+        // Док прячем: в режиме правки он перекрывал бы нижнюю панель кнопок и мешал перетаскиванию.
         setDockInteractionEnabled(false)
+        binding.dockContainer.root.animate().cancel()
+        binding.dockContainer.root.visibility = View.GONE
         binding.glassEditDone.visibility = View.VISIBLE
         if (currentSettings.smoothAnimations) {
             binding.glassEditDone.alpha = 0f
@@ -4413,23 +4432,12 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     }
 
     private fun addSelectedWidget(info: android.appwidget.AppWidgetProviderInfo) {
-        // Часть OEM-виджетов (Samsung, Xiaomi) требует, чтобы лаунчер был
-        // домашним экраном по умолчанию — иначе система молча режет привязку.
-        if (!isDefaultLauncher()) {
-            Toast.makeText(
-                this,
-                "Сначала выберите Morphix домашним экраном — иначе система не даёт привязать виджет",
-                Toast.LENGTH_LONG
-            ).show()
-            showSetDefaultLauncherDialog()
-            return
-        }
-
         val newWidgetId = appWidgetHost.allocateAppWidgetId()
         if (newWidgetId == AppWidgetManager.INVALID_APPWIDGET_ID) {
             Toast.makeText(this, "Не удалось выделить место для виджета", Toast.LENGTH_SHORT).show()
             return
         }
+        pendingWidgetId = newWidgetId
         val canBind = try {
             appWidgetManager.bindAppWidgetIdIfAllowed(newWidgetId, info.provider)
         } catch (e: Exception) {
@@ -4440,12 +4448,16 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
             val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, newWidgetId)
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, info.provider)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER_PROFILE, info.profile)
+                }
             }
             // Проверяем, что системный диалог вообще есть: раньше интент мог
             // резолвиться в нас самих (был лишний intent-filter), и тогда
             // singleTask-активити не возвращала результат.
             if (bindIntent.resolveActivity(packageManager) == null) {
                 appWidgetHost.deleteAppWidgetId(newWidgetId)
+                pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
                 Toast.makeText(this, "Система не отвечает на запрос привязки виджета", Toast.LENGTH_SHORT).show()
                 return
             }
@@ -4457,6 +4469,7 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
                 e.printStackTrace()
                 widgetBindInProgress = false
                 appWidgetHost.deleteAppWidgetId(newWidgetId)
+                pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
                 Toast.makeText(this, "Не удалось добавить виджет", Toast.LENGTH_SHORT).show()
                 return
             }
@@ -4465,12 +4478,14 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     }
 
     private fun configureWidgetOrAdd(appWidgetId: Int) {
+        pendingWidgetId = appWidgetId
         val appWidgetInfo = appWidgetManager.getAppWidgetInfo(appWidgetId)
         if (appWidgetInfo == null) {
             // После диалога привязки провайдер ещё не виден — не удаляем ID
             // сразу, а пробуем дождаться привязки повторным чтением.
             widgetBindInProgress = false
             appWidgetHost.deleteAppWidgetId(appWidgetId)
+            pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
             Toast.makeText(this, "Виджет не привязался — попробуйте ещё раз", Toast.LENGTH_SHORT).show()
             return
         }
@@ -4485,10 +4500,14 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
             val bindIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_BIND).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER, appWidgetInfo.provider)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+                    putExtra(AppWidgetManager.EXTRA_APPWIDGET_PROVIDER_PROFILE, appWidgetInfo.profile)
+                }
             }
             if (bindIntent.resolveActivity(packageManager) == null) {
                 widgetBindInProgress = false
                 appWidgetHost.deleteAppWidgetId(appWidgetId)
+                pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
                 Toast.makeText(this, "Система не отвечает на запрос привязки виджета", Toast.LENGTH_SHORT).show()
                 return
             }
@@ -4506,6 +4525,7 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     }
 
     private fun proceedWithWidgetConfiguration(appWidgetId: Int, appWidgetInfo: android.appwidget.AppWidgetProviderInfo) {
+        pendingWidgetId = appWidgetId
         if (appWidgetInfo.configure != null) {
             val configIntent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
                 component = appWidgetInfo.configure
@@ -4592,6 +4612,7 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     }
 
     private fun doAttachWidgetToHome(appWidgetId: Int) {
+        pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
         val oldId = replacingWidgetId
         replacingWidgetId = null
 
@@ -5008,6 +5029,7 @@ private var editModeOpenedAt = 0L
                 AppLoader.launchApp(this, item, view, smoothAnimations = currentSettings.smoothAnimations)
             }
         )
+        drawerAppsAdapter.spanCount = drawerColumnCount()
         drawerAppsAdapter.updateConfig(
             shape = currentSettings.iconShape,
             labels = currentSettings.showLabels,

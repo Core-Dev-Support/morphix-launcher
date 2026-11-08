@@ -29,7 +29,8 @@ class DockController(
     private val prefsManager: PreferencesManager,
     private val launchApp: (AppItem, View?) -> Unit,
     private val onLongPressItem: (AppItem, View) -> Unit,
-    private val onStartDragFromDock: (AppItem, View, Float, Float) -> Unit
+    private val onStartDragFromDock: (AppItem, View, Float, Float) -> Unit,
+    var canShowDock: () -> Boolean = { true }
 ) {
 
     val adapter = DockAdapter(
@@ -120,12 +121,14 @@ class DockController(
     private fun syncDockToCount(allApps: List<AppItem>, hiddenPackages: Set<String>, count: Int) {
         val target = count.coerceIn(0, MAX_DOCK_SLOTS)
         val available = allApps.map { it.packageName }.toSet()
-        val compact = dockPackages
+        var compact = dockPackages
             .filter { it.isNotEmpty() && it in available && it !in hiddenPackages }
             .distinct()
             .toMutableList()
 
-        if (compact.size < target) {
+        if (compact.size > target) {
+            compact = compact.take(target).toMutableList()
+        } else if (compact.size < target) {
             for (pkg in defaultCandidates()) {
                 if (compact.size >= target) break
                 if (pkg in available && pkg !in compact && pkg !in hiddenPackages) {
@@ -146,7 +149,8 @@ class DockController(
      */
     fun applyVisibility(settings: LauncherSettings) {
         val root = binding.dockContainer.root
-        val shouldShow = settings.isDockEnabled
+        val shouldShow = canShowDock()
+                && settings.isDockEnabled
                 && settings.dockIconCount > 0
 
         if (shouldShow && root.visibility != View.VISIBLE) {
@@ -161,6 +165,7 @@ class DockController(
                     .start()
             }
         } else if (!shouldShow) {
+            root.animate().cancel()
             root.visibility = View.GONE
         }
 
@@ -207,22 +212,18 @@ class DockController(
     /** Добавляет пакет. false — уже в доке или лимит исчерпан. */
     fun addPackage(packageName: String, maxSlots: Int): Boolean {
         if (dockPackages.contains(packageName)) return false
-        if (dockPackages.count { it.isNotEmpty() } >= maxSlots.coerceIn(0, MAX_DOCK_SLOTS)) return false
-        // занимаем первую пустую дырку от удалённой иконки, а не растём в конец
-        val hole = dockPackages.indexOfFirst { it.isEmpty() }
-        if (hole != -1) {
-            dockPackages[hole] = packageName
-        } else {
-            dockPackages.add(packageName)
-        }
+        val currentValidCount = dockPackages.count { it.isNotEmpty() }
+        if (currentValidCount >= maxSlots.coerceIn(0, MAX_DOCK_SLOTS)) return false
+        dockPackages.removeAll { it.isEmpty() }
+        dockPackages.add(packageName)
         persist()
         return true
     }
 
     fun removePackage(packageName: String): Boolean {
-        val idx = dockPackages.indexOf(packageName)
-        if (idx == -1) return false
-        dockPackages[idx] = ""
+        val removed = dockPackages.remove(packageName)
+        if (!removed) return false
+        dockPackages.removeAll { it.isEmpty() }
         persist()
         return true
     }

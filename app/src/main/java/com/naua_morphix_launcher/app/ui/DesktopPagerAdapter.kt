@@ -115,6 +115,7 @@ class DesktopPagerAdapter(
         for (holder in activeHolders) {
             val pos = holder.bindingAdapterPosition
             if (pos != RecyclerView.NO_POSITION && pos in newPages.indices) {
+                holder.pageAdapter.spanCount = span
                 holder.pageAdapter.updateConfig(shape, labels, scale, smoothAnimations)
                 holder.bind(newPages[pos], pos)
             }
@@ -191,7 +192,9 @@ class DesktopPagerAdapter(
             onGetWidgetHostView = onGetWidgetHostView,
             onAppClickWithView = onAppClickWithView,
             onSelectToggle = onSelectToggle
-        )
+        ).apply {
+            this.spanCount = this@DesktopPagerAdapter.spanCount
+        }
 
         fun getRecyclerView(): RecyclerView = binding.pageRecyclerView
 
@@ -410,6 +413,7 @@ class DesktopPagerAdapter(
             boundPosition = position
             binding.pageWidgetsContainer.visibility = View.GONE
             (binding.pageRecyclerView.layoutManager as? GridLayoutManager)?.spanCount = spanCount
+            pageAdapter.spanCount = spanCount
             // Set config and badges first (no-op if unchanged, no extra notify)
             pageAdapter.updateConfig(iconShape, showLabels, iconScale, smoothAnimations)
             pageAdapter.updateBadgeCounts(badgeCounts)
