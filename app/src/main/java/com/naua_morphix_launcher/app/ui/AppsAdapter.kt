@@ -390,10 +390,12 @@ class AppsAdapter(
 
         /** Отложенный long-press на ячейке. */
         private var pendingLongPress: Runnable? = null
+        private var pendingPressAnimation: Runnable? = null
         private var downX = 0f
         private var downY = 0f
         private var downRawX = 0f
         private var downRawY = 0f
+        private var isScaledDown = false
 
         /**
          * Элемент под слушателем касаний. Слушатель ставится один раз в init,
@@ -417,6 +419,11 @@ class AppsAdapter(
             when (event.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> {
                     downItem = item
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    isScaledDown = false
+                    cancelPendingCallbacks()
+
                     if (item.isEmpty) {
                         downX = event.rawX
                         downY = event.rawY
@@ -425,18 +432,24 @@ class AppsAdapter(
                             v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                             onEmptyCellLongClick?.invoke()
                         }
-                        TOUCH_HANDLER.postDelayed(pendingLongPress!!, 160)
+                        TOUCH_HANDLER.postDelayed(pendingLongPress!!, 240)
                     } else {
-                        downRawX = event.rawX
-                        downRawY = event.rawY
-                        if (smoothAnimations) {
-                            v.animate()
-                                .scaleX(0.88f)
-                                .scaleY(0.88f)
-                                .setDuration(120)
-                                .setInterpolator(android.view.animation.DecelerateInterpolator())
-                                .start()
+                        // Анимацию нажатия запускаем ТОЛЬКО с задержкой 100мс (tap timeout),
+                        // чтобы при обычном скролле списков вьюшки не дергались и не спамили анимации
+                        val pressRunnable = Runnable {
+                            if (smoothAnimations) {
+                                isScaledDown = true
+                                v.animate()
+                                    .scaleX(0.90f)
+                                    .scaleY(0.90f)
+                                    .setDuration(120)
+                                    .setInterpolator(android.view.animation.DecelerateInterpolator())
+                                    .start()
+                            }
                         }
+                        pendingPressAnimation = pressRunnable
+                        TOUCH_HANDLER.postDelayed(pressRunnable, 100)
+
                         val pressedItem = downItem
                         pendingLongPress = Runnable {
                             markLongPressConsumed()
@@ -447,50 +460,46 @@ class AppsAdapter(
                                 onAppLongClick?.invoke(pressedItem, binding.root, this)
                             }
                         }
-                        TOUCH_HANDLER.postDelayed(pendingLongPress!!, 200)
+                        TOUCH_HANDLER.postDelayed(pendingLongPress!!, 400)
                     }
                 }
                 android.view.MotionEvent.ACTION_MOVE -> {
-                    if (item.isEmpty) {
-                        val diffX = Math.abs(event.rawX - downX)
-                        val diffY = Math.abs(event.rawY - downY)
-                        if (diffX > 12 * density || diffY > 12 * density) {
-                            cancelPendingCallbacks()
-                        }
-                    } else {
-                        val diffX = Math.abs(event.rawX - downRawX)
-                        val diffY = Math.abs(event.rawY - downRawY)
-                        if (diffX > 10 * density || diffY > 10 * density) {
+                    val diffX = Math.abs(event.rawX - downRawX)
+                    val diffY = Math.abs(event.rawY - downRawY)
+                    if (diffX > 10 * density || diffY > 10 * density) {
+                        cancelPendingCallbacks()
+                        if (isScaledDown) {
+                            isScaledDown = false
                             if (smoothAnimations) {
                                 v.animate()
                                     .scaleX(1.0f)
                                     .scaleY(1.0f)
-                                    .setDuration(150)
+                                    .setDuration(120)
                                     .setInterpolator(android.view.animation.DecelerateInterpolator())
                                     .start()
                             } else {
                                 v.scaleX = 1.0f
                                 v.scaleY = 1.0f
                             }
-                            cancelPendingCallbacks()
                         }
                     }
                 }
                 android.view.MotionEvent.ACTION_UP -> {
-                    if (!item.isEmpty) {
+                    cancelPendingCallbacks()
+                    if (isScaledDown) {
+                        isScaledDown = false
                         if (smoothAnimations) {
                             v.animate()
                                 .scaleX(1.0f)
                                 .scaleY(1.0f)
-                                .setDuration(220)
-                                .setInterpolator(android.view.animation.OvershootInterpolator(2.2f))
+                                .setDuration(180)
+                                .setInterpolator(android.view.animation.OvershootInterpolator(1.8f))
                                 .start()
                         } else {
                             v.scaleX = 1.0f
                             v.scaleY = 1.0f
                         }
                     }
-                    cancelPendingCallbacks()
                     if (!consumeTapAfterLongPress()) {
                         if (item.isEmpty) {
                             val diffX = Math.abs(event.rawX - downX)
@@ -510,12 +519,14 @@ class AppsAdapter(
                     }
                 }
                 android.view.MotionEvent.ACTION_CANCEL -> {
-                    if (!item.isEmpty) {
+                    cancelPendingCallbacks()
+                    if (isScaledDown) {
+                        isScaledDown = false
                         if (smoothAnimations) {
                             v.animate()
                                 .scaleX(1.0f)
                                 .scaleY(1.0f)
-                                .setDuration(150)
+                                .setDuration(120)
                                 .setInterpolator(android.view.animation.DecelerateInterpolator())
                                 .start()
                         } else {
@@ -523,7 +534,6 @@ class AppsAdapter(
                             v.scaleY = 1.0f
                         }
                     }
-                    cancelPendingCallbacks()
                 }
             }
             return true
@@ -543,8 +553,15 @@ class AppsAdapter(
         )
 
         fun cancelPendingCallbacks() {
+            pendingPressAnimation?.let { TOUCH_HANDLER.removeCallbacks(it) }
+            pendingPressAnimation = null
             pendingLongPress?.let { TOUCH_HANDLER.removeCallbacks(it) }
             pendingLongPress = null
+            if (isScaledDown) {
+                isScaledDown = false
+                binding.root.scaleX = 1.0f
+                binding.root.scaleY = 1.0f
+            }
         }
 
         fun applyDragAlpha(item: AppItem) {

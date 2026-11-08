@@ -33,10 +33,12 @@
         <LinearLayout android:id="@+id/pageIndicatorLayout" android:layout_width="wrap_content" android:layout_height="14dp" android:layout_marginBottom="0dp" android:gravity="center" android:orientation="horizontal" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" />
 
         <!-- Док: плавающая стеклянная капсула с быстрым доступом -->
-        <include android:id="@+id/dockContainer" layout="@layout/layout_dock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="10dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" />
+        
 
         <!-- ViewPager -->
         <androidx.viewpager2.widget.ViewPager2 android:id="@+id/homeViewPager" android:layout_width="match_parent" android:layout_height="0dp" android:clipChildren="false" android:clipToPadding="false" android:layout_marginTop="28dp" android:layout_marginBottom="0dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintTop_toTopOf="parent" />
+
+        <include android:id="@+id/dockContainer" layout="@layout/layout_dock" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginBottom="10dp" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" />
 
         <!-- Нижняя панель действий режима редактирования (Обои, Виджеты, Настройки) -->
         <LinearLayout android:id="@+id/glassEditModeBottomBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="26dp" android:layout_marginStart="20dp" android:layout_marginEnd="20dp" android:elevation="10dp" android:visibility="gone" app:layout_constraintBottom_toBottomOf="parent" app:layout_constraintEnd_toEndOf="parent" app:layout_constraintStart_toStartOf="parent" tools:visibility="visible">
@@ -105,7 +107,7 @@
             <com.google.android.material.button.MaterialButton android:id="@+id/btnWebSearch" style="@style/Widget.Material3.Button.TonalButton" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center_horizontal" android:layout_marginBottom="12dp" android:text="Искать в Google" android:textColor="#FFFFFF" android:visibility="gone" app:cornerRadius="20dp" app:icon="@drawable/ic_search" app:iconTint="#FFFFFF" />
 
             <!-- Сетка всех приложений -->
-            <androidx.recyclerview.widget.RecyclerView android:id="@+id/appsRecyclerView" android:layout_width="match_parent" android:layout_height="match_parent" android:clipToPadding="false" android:overScrollMode="never" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingBottom="48dp" />
+            <androidx.recyclerview.widget.RecyclerView android:id="@+id/appsRecyclerView" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:clipToPadding="false" android:overScrollMode="never" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingBottom="48dp" />
 
         </LinearLayout>
 

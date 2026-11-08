@@ -254,6 +254,11 @@ class MainActivity : AppCompatActivity() {
             },
             canShowDock = { isDockInteractionAllowed && !isEditMode && binding.glassAppDrawer.visibility != View.VISIBLE }
         )
+
+        binding.dockContainer.root.bringToFront()
+        binding.dockContainer.root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            updateDockSpacing()
+        }
     }
 
     private fun refreshDock() {
@@ -271,20 +276,31 @@ class MainActivity : AppCompatActivity() {
         val dock = binding.dockContainer.root
         val density = resources.displayMetrics.density
 
-        // отступ от нижней границы экрана: системная панель + небольшой зазор
+        // Положение дока: отступ снизу + системный инсет
         val dockLp = dock.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams
         dockLp?.let {
-            it.bottomMargin = dockBottomInset + (10 * density).toInt()
-            dock.layoutParams = it
+            val neededBottom = dockBottomInset + (10 * density).toInt()
+            if (it.bottomMargin != neededBottom) {
+                it.bottomMargin = neededBottom
+                dock.layoutParams = it
+            }
         }
 
         val pagerLp = binding.homeViewPager.layoutParams as? androidx.constraintlayout.widget.ConstraintLayout.LayoutParams ?: return
-        if (dock.visibility == View.VISIBLE && dock.height > 0) {
-            pagerLp.bottomMargin = dock.height + dockBottomInset + (10 * density).toInt()
+        val isDockShowing = dock.visibility == View.VISIBLE && currentSettings.isDockEnabled && currentSettings.dockIconCount > 0
+        val targetMargin = if (isDockShowing) {
+            // Если док ещё не измерен (первый кадр до layout), берём оценку ~82dp,
+            // чтобы нижний ряд сетки не рисовался под доком до первого layout-прохода.
+            val dockH = if (dock.height > 0) dock.height else (82 * density).toInt()
+            dockH + dockBottomInset + (10 * density).toInt()
         } else {
-            pagerLp.bottomMargin = 0
+            dockBottomInset + (10 * density).toInt()
         }
-        binding.homeViewPager.layoutParams = pagerLp
+
+        if (pagerLp.bottomMargin != targetMargin) {
+            pagerLp.bottomMargin = targetMargin
+            binding.homeViewPager.layoutParams = pagerLp
+        }
     }
 
     /**
@@ -967,8 +983,14 @@ private fun isLowEndDevice(): Boolean {
         }
     }
 
+        private var swipeTracking = false
+    private var swipeStartX = 0f
+    private var swipeStartY = 0f
+    private var swipeStartTime = 0L
+
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (isDraggingDesktopItem) {
+            swipeTracking = false
             when (ev.actionMasked) {
                 MotionEvent.ACTION_MOVE -> {
                     handleDragMove(ev.rawX, ev.rawY)
@@ -981,6 +1003,7 @@ private fun isLowEndDevice(): Boolean {
             }
         }
         if (isDraggingWidget) {
+            swipeTracking = false
             when (ev.actionMasked) {
                 MotionEvent.ACTION_MOVE -> {
                     handleWidgetDragMove(ev.rawX, ev.rawY)
@@ -992,6 +1015,61 @@ private fun isLowEndDevice(): Boolean {
                 }
             }
         }
+
+        // Универсальный свайп вверх для открытия меню приложений из любой точки экрана:
+        // работает над доком, иконками, навигационной панелью и пустыми местами.
+        if (!isEditMode && binding.glassAppDrawer.visibility != View.VISIBLE && currentSettings.layoutMode == LayoutMode.DRAWER) {
+            val density = resources.displayMetrics.density
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    swipeTracking = true
+                    swipeStartX = ev.rawX
+                    swipeStartY = ev.rawY
+                    swipeStartTime = SystemClock.uptimeMillis()
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (swipeTracking) {
+                        val dy = ev.rawY - swipeStartY
+                        val dx = ev.rawX - swipeStartX
+                        // Свайп вверх минимум на 40dp и вертикальнее горизонтали
+                        if (dy < -40 * density && -dy > Math.abs(dx) * 1.25f) {
+                            swipeTracking = false
+                            // Отменяем нажатие у дочерних вью (иконок/кнопок)
+                            val cancel = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
+                            super.dispatchTouchEvent(cancel)
+                            cancel.recycle()
+                            openAppDrawer()
+                            return true
+                        }
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (swipeTracking) {
+                        swipeTracking = false
+                        val dy = ev.rawY - swipeStartY
+                        val dx = ev.rawX - swipeStartX
+                        val dt = SystemClock.uptimeMillis() - swipeStartTime
+                        val velocityY = if (dt > 0) (dy / dt) * 1000f else 0f
+                        // Быстрый взмах вверх (флинг)
+                        if ((dy < -25 * density && -dy > Math.abs(dx) * 1.2f) ||
+                            (velocityY < -500f && dy < -15 * density && -dy > Math.abs(dx))
+                        ) {
+                            val cancel = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
+                            super.dispatchTouchEvent(cancel)
+                            cancel.recycle()
+                            openAppDrawer()
+                            return true
+                        }
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    swipeTracking = false
+                }
+            }
+        } else {
+            swipeTracking = false
+        }
+
         return super.dispatchTouchEvent(ev)
     }
 
@@ -5006,15 +5084,10 @@ private var editModeOpenedAt = 0L
 
     private fun setupAppDrawer() {
         binding.appsRecyclerView.layoutManager = GridLayoutManager(this, drawerColumnCount())
-        // Без этого каждый бейдж уведомления запускал DefaultItemAnimator
-        // с кросс-фейдом и рендером ячейки в offscreen-слой — прямой источник
-        // jank на слабом GPU
         binding.appsRecyclerView.itemAnimator = null
         binding.appsRecyclerView.setHasFixedSize(true)
-        // список приложений длинный: держим кэш разметки, чтобы при быстром
-        // скролле не инфлятить ячейки на каждом кадре
-        binding.appsRecyclerView.setItemViewCacheSize(20)
-        binding.appsRecyclerView.setDrawingCacheEnabled(false)
+        binding.appsRecyclerView.setItemViewCacheSize(8)
+        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, 25)
         (binding.appsRecyclerView.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
 
