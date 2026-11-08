@@ -632,7 +632,7 @@ class AppsAdapter(
             }
 
             val iconLp = binding.iconContainer.layoutParams
-            if (iconLp.width != finalIconSize || iconLp.height != finalIconSize) {
+            if (iconLp != null && (iconLp.width != finalIconSize || iconLp.height != finalIconSize)) {
                 iconLp.width = finalIconSize
                 iconLp.height = finalIconSize
                 binding.iconContainer.layoutParams = iconLp

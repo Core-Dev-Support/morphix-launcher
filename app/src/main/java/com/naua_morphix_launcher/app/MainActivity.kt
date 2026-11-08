@@ -150,7 +150,8 @@ class MainActivity : AppCompatActivity() {
         if (!::dockController.isInitialized || !dockController.isDockVisible()) return false
         val item = activeDraggedItem ?: return false
         if (item.isFolder || item.isWidget || item.isEmpty) return false
-        // иконку, уже лежащую в доке, повторно туда класть нечего
+        if (isDraggingFromDock) return true
+        if (dockController.items().size >= currentSettings.dockIconCount) return false
         return dockController.items().none { it.packageName == item.packageName }
     }
 
@@ -175,18 +176,23 @@ class MainActivity : AppCompatActivity() {
      */
     private fun handleDropOnDock(): Boolean {
         val item = activeDraggedItem ?: return false
+        if (isDraggingFromDock) {
+            // Иконка перетаскивалась из самого дока и была отпущена обратно в док:
+            // она уже лежит в доке, ничего с рабочего стола не удаляем и не добавляем.
+            setDockDropHighlight(false)
+            isHoveringDock = false
+            refreshDock()
+            updateHomeScreenApps()
+            return true
+        }
         if (!dockController.addPackage(item.packageName, currentSettings.dockIconCount)) return false
 
         // убираем из сетки рабочего стола, если там была
-        if (!isDraggingFromDock) {
-            val ordered = prefsManager.getHomeScreenOrderedPackages(currentSpace).toMutableList()
-            val idx = ordered.indexOf(item.packageName)
-            if (idx != -1) {
-                ordered[idx] = ""
-                prefsManager.setHomeScreenOrderedPackages(currentSpace, ordered)
-            }
-        } else {
-            dockController.removePackage(item.packageName)
+        val ordered = prefsManager.getHomeScreenOrderedPackages(currentSpace).toMutableList()
+        val idx = ordered.indexOf(item.packageName)
+        if (idx != -1) {
+            ordered[idx] = ""
+            prefsManager.setHomeScreenOrderedPackages(currentSpace, ordered)
         }
 
         refreshDock()
@@ -987,6 +993,10 @@ private fun isLowEndDevice(): Boolean {
     private var swipeStartX = 0f
     private var swipeStartY = 0f
     private var swipeStartTime = 0L
+    private var drawerSwipeTracking = false
+    private var drawerSwipeStartX = 0f
+    private var drawerSwipeStartY = 0f
+    private var drawerSwipeStartTime = 0L
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (isDraggingDesktopItem) {
@@ -1068,6 +1078,64 @@ private fun isLowEndDevice(): Boolean {
             }
         } else {
             swipeTracking = false
+        }
+
+        // Свайп вниз в меню приложений для его закрытия при нахождении в самом начале списка
+        if (binding.glassAppDrawer.visibility == View.VISIBLE) {
+            val density = resources.displayMetrics.density
+            val canScrollUp = binding.appsRecyclerView.canScrollVertically(-1)
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    drawerSwipeTracking = !canScrollUp
+                    drawerSwipeStartX = ev.rawX
+                    drawerSwipeStartY = ev.rawY
+                    drawerSwipeStartTime = SystemClock.uptimeMillis()
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (drawerSwipeTracking) {
+                        val dy = ev.rawY - drawerSwipeStartY
+                        val dx = ev.rawX - drawerSwipeStartX
+                        if (dy > 45 * density && dy > Math.abs(dx) * 1.25f) {
+                            drawerSwipeTracking = false
+                            val cancel = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
+                            super.dispatchTouchEvent(cancel)
+                            cancel.recycle()
+                            closeAppDrawer()
+                            return true
+                        } else if (dy < -10 * density) {
+                            drawerSwipeTracking = false
+                        }
+                    } else if (!binding.appsRecyclerView.canScrollVertically(-1)) {
+                        drawerSwipeTracking = true
+                        drawerSwipeStartX = ev.rawX
+                        drawerSwipeStartY = ev.rawY
+                        drawerSwipeStartTime = SystemClock.uptimeMillis()
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (drawerSwipeTracking) {
+                        drawerSwipeTracking = false
+                        val dy = ev.rawY - drawerSwipeStartY
+                        val dx = ev.rawX - drawerSwipeStartX
+                        val dt = SystemClock.uptimeMillis() - drawerSwipeStartTime
+                        val velocityY = if (dt > 0) (dy / dt) * 1000f else 0f
+                        if ((dy > 30 * density && dy > Math.abs(dx) * 1.2f) ||
+                            (velocityY > 500f && dy > 15 * density && dy > Math.abs(dx))
+                        ) {
+                            val cancel = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
+                            super.dispatchTouchEvent(cancel)
+                            cancel.recycle()
+                            closeAppDrawer()
+                            return true
+                        }
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    drawerSwipeTracking = false
+                }
+            }
+        } else {
+            drawerSwipeTracking = false
         }
 
         return super.dispatchTouchEvent(ev)
@@ -2148,7 +2216,7 @@ private fun isLowEndDevice(): Boolean {
         // sourceIdx == -1 в ветках выше означает, что в ordered её не было,
         // то есть displaceAndInsert уже добавил её на экран.
         if (isDraggingFromDock && sourceItem != null) {
-            if (effectiveDropMode != HighlightMode.NONE || sourceIdx == -1) {
+            if (effectiveDropMode != HighlightMode.NONE) {
                 dockController.removePackage(sourceItem.packageName)
                 refreshDock()
             }
@@ -4307,15 +4375,12 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
 
     private fun showSetDefaultLauncherDialog() {
         dismissActivePopups()
-        // На Xiaomi/HyperOS выбор стороннего лаунчера по умолчанию сам переводит
-        // системную навигацию с жестов на кнопки — это ограничение прошивки,
-        // а не баг Morphix. Предупреждаем заранее, чтобы не было сюрприза.
-        val message = "Пожалуйста, сделайте Morphix Launcher вашим приложением " +
-            "по умолчанию для лучшего опыта." +
-            "\n\nНа Xiaomi жесты заменятся кнопками — так прошивка работает " +
-            "с любым сторонним лаунчером."
+        val message = "Чтобы Morphix Launcher работал как основной домашний экран, выберите его в настройках системы.\n\n" +
+            "Пути на Xiaomi / HyperOS:\n" +
+            "1. Настройки → Рабочий стол → Рабочий стол по умолчанию → Morphix\n" +
+            "2. Или: Настройки → Приложения → Все приложения → ⋮ (вверху справа) → Приложения по умолчанию → Главный экран → Morphix"
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("Добро пожаловать в Morphix!")
+            .setTitle("Сделать основным экраном")
             .setMessage(message)
             .setPositiveButton("Перейти в настройки") { _, _ ->
                 openDefaultLauncherChooser()
@@ -4327,49 +4392,58 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     }
 
     private fun openDefaultLauncherChooser() {
-        // Всё, включая createRequestRoleIntent, внутри try: раньше создание
-        // интента было снаружи, и на части прошивок кнопка молча умирала.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                val roleManager = getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
-                if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true &&
-                    !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
-                ) {
-                    val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
-                    if (intent.resolveActivity(packageManager) != null) {
-                        startActivity(intent)
+        openDefaultLauncherSettings(this)
+    }
+
+    companion object {
+        /** Открывает экран выбора лаунчера по умолчанию с поддержкой Xiaomi / HyperOS / MIUI и AOSP. */
+        fun openDefaultLauncherSettings(context: Context) {
+            val intents = mutableListOf<Intent>()
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
+                    if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true &&
+                        !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
+                    ) {
+                        intents.add(roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME))
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            // Фирменные интенты Xiaomi / HyperOS / MIUI
+            intents.add(Intent("miui.intent.action.PREFERRED_APP_SETTINGS"))
+            intents.add(Intent().setComponent(ComponentName("com.miui.home", "com.miui.home.launcher.setting.HomeSettingActivity")))
+            intents.add(Intent().setComponent(ComponentName("com.miui.home", "com.miui.home.launcher.setting.DefaultHomeActivity")))
+            intents.add(Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageDefaultAppsSettingsActivity")))
+            intents.add(Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$HomeSettingsActivity")))
+
+            // Стандартные AOSP интенты
+            intents.add(Intent(Settings.ACTION_HOME_SETTINGS))
+            intents.add(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+            intents.add(Intent(Settings.ACTION_APPLICATION_SETTINGS))
+            intents.add(Intent(Settings.ACTION_SETTINGS))
+
+            for (intent in intents) {
+                try {
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    if (intent.resolveActivity(context.packageManager) != null) {
+                        context.startActivity(intent)
                         return
                     }
+                } catch (e: Exception) {
+                    // пробуем следующий интент
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
+
+            Toast.makeText(
+                context,
+                "Настройки → Рабочий стол → Рабочий стол по умолчанию (или Настройки → Приложения → Все приложения → ⋮ → По умолчанию)",
+                Toast.LENGTH_LONG
+            ).show()
         }
-        try {
-            val manageIntent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-            if (manageIntent.resolveActivity(packageManager) != null) {
-                startActivity(manageIntent)
-                return
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        try {
-            val homeIntent = Intent(Settings.ACTION_HOME_SETTINGS)
-            if (homeIntent.resolveActivity(packageManager) != null) {
-                startActivity(homeIntent)
-                return
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        // Сюда доходим, только если системе вообще некуда вести, —
-        // показываем точный путь вместо тишины.
-        Toast.makeText(
-            this,
-            "Не вышло открыть выбор: Настройки → Приложения → По умолчанию → Главный экран",
-            Toast.LENGTH_LONG
-        ).show()
     }
 
     private fun launchWidgetPicker() {
@@ -5083,11 +5157,16 @@ private var editModeOpenedAt = 0L
     }
 
     private fun setupAppDrawer() {
-        binding.appsRecyclerView.layoutManager = GridLayoutManager(this, drawerColumnCount())
+        val columns = drawerColumnCount()
+        val gridLayoutManager = GridLayoutManager(this, columns).apply {
+            isItemPrefetchEnabled = true
+            initialPrefetchItemCount = columns * 2
+        }
+        binding.appsRecyclerView.layoutManager = gridLayoutManager
         binding.appsRecyclerView.itemAnimator = null
         binding.appsRecyclerView.setHasFixedSize(true)
-        binding.appsRecyclerView.setItemViewCacheSize(8)
-        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, 25)
+        binding.appsRecyclerView.setItemViewCacheSize(12)
+        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, 30)
         (binding.appsRecyclerView.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
 

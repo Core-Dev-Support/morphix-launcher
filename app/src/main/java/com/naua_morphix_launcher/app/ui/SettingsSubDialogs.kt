@@ -231,47 +231,7 @@ object SettingsSubDialogs {
     }
 
     private fun openDefaultLauncherChooser(context: Context) {
-        // createRequestRoleIntent тоже внутри try + проверка resolveActivity:
-        // иначе кнопка на части прошивок молча умирала.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
-                if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true &&
-                    !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
-                ) {
-                    val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME)
-                    if (intent.resolveActivity(context.packageManager) != null) {
-                        context.startActivity(intent)
-                        return
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-        try {
-            val manageIntent = Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
-            if (manageIntent.resolveActivity(context.packageManager) != null) {
-                context.startActivity(manageIntent)
-                return
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        try {
-            val homeIntent = Intent(Settings.ACTION_HOME_SETTINGS)
-            if (homeIntent.resolveActivity(context.packageManager) != null) {
-                context.startActivity(homeIntent)
-                return
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        Toast.makeText(
-            context,
-            "Не вышло открыть выбор: Настройки → Приложения → По умолчанию → Главный экран",
-            Toast.LENGTH_LONG
-        ).show()
+        com.naua_morphix_launcher.app.MainActivity.openDefaultLauncherSettings(context)
     }
 
     private fun isAccessibilityServiceEnabled(context: Context): Boolean {
