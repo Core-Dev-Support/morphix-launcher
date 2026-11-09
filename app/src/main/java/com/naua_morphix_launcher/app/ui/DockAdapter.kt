@@ -116,7 +116,9 @@ class DockAdapter(
         }
 
         fun bind(item: AppItem) {
-            cancelPendingDrag()
+            // Перепривязка того же приложения (бейдж, обновление списка) не должна
+            // рвать жест в процессе: иначе долгое нажатие и перетаскивание пропадают.
+            if (downItem?.packageName != item.packageName) cancelPendingDrag()
             // Ширина ячейки: 50dp в плавающей капсуле, Match_Parent по всему
             // спану в режиме FULL_WIDTH (GridLayoutManager сам делит ширину
             // поровну, иконка центрируется через gravity разметки).

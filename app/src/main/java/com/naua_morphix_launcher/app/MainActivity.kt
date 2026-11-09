@@ -2239,11 +2239,21 @@ private fun isLowEndDevice(): Boolean {
         binding.root.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
     }
 
+    /**
+     * Отмена перетаскивания из дока (ACTION_CANCEL). Дроп и Quick Actions не
+     * выполняем: иконка остаётся в доке. Временную страницу, открытую краем
+     * экрана, убираем так же, как при обычном завершении.
+     */
     private fun cancelDockDrag() {
         if (!isDraggingFromDock) return
         binding.dragOverlayContainer.visibility = View.GONE
         binding.floatingDragView.visibility = View.GONE
         binding.floatingWidgetDragView.visibility = View.GONE
+        setDockDropHighlight(false)
+        if (hasTemporaryDragPage) {
+            hasTemporaryDragPage = false
+            stripEmptyTrailingPages()
+        }
         resetDragState()
     }
 
