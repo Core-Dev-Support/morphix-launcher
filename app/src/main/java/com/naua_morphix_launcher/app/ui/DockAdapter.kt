@@ -13,6 +13,9 @@ import com.naua_morphix_launcher.app.databinding.ItemDockIconBinding
 import com.naua_morphix_launcher.app.model.AppItem
 import com.naua_morphix_launcher.app.model.IconShape
 
+/** Состояние жеста на одной иконке дока. Вынесено из inner class: Kotlin не допускает enum внутри неё. */
+private enum class GestureState { IDLE, PRESSED, LONG_PRESS_ARMED, DRAGGING, CANCELLED }
+
 /**
  * Адаптер дока — плавающей капсулы с быстрым доступом в стиле MIUI.
  *
@@ -99,8 +102,6 @@ class DockAdapter(
     @SuppressLint("ClickableViewAccessibility")
     inner class DockViewHolder(private val binding: ItemDockIconBinding) :
         RecyclerView.ViewHolder(binding.root) {
-
-        private enum class GestureState { IDLE, PRESSED, LONG_PRESS_ARMED, DRAGGING, CANCELLED }
 
         private var gestureState = GestureState.IDLE
         private var downRawX = 0f
