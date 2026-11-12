@@ -187,6 +187,16 @@ class MainActivity : AppCompatActivity() {
         }
         if (!dockController.addPackage(item.packageName, currentSettings.dockIconCount)) return false
 
+        if (dragSourceFolderId != null) {
+            val folderId = dragSourceFolderId!!
+            val folder = prefsManager.getFolders(currentSpace)[folderId]
+            if (folder != null) {
+                folder.packageNames.remove(item.packageName)
+                prefsManager.saveFolder(currentSpace, folder)
+            }
+            dragSourceFolderId = null
+        }
+
         // убираем из сетки рабочего стола, если там была
         val ordered = prefsManager.getHomeScreenOrderedPackages(currentSpace).toMutableList()
         val idx = ordered.indexOf(item.packageName)
@@ -657,7 +667,15 @@ class MainActivity : AppCompatActivity() {
         setupGlassmorphism()
 
         val columns = drawerColumnCount()
-        binding.appsRecyclerView.layoutManager = GridLayoutManager(this, columns)
+        val currentGlm = binding.appsRecyclerView.layoutManager as? GridLayoutManager
+        if (currentGlm != null) {
+            if (currentGlm.spanCount != columns) {
+                currentGlm.spanCount = columns
+                currentGlm.initialPrefetchItemCount = columns * 2
+            }
+        } else {
+            setupAppDrawer()
+        }
         drawerAppsAdapter.spanCount = columns
 
         drawerAppsAdapter.updateConfig(
@@ -1691,7 +1709,8 @@ private fun isLowEndDevice(): Boolean {
 
         // Дроп в док обрабатываем раньше всего: это самый частый вариант
         // при переносе иконки, и он не должен зависеть от состояния сетки
-        val droppingOnDock = isHoveringDock || (dockAcceptsDrop() && dockController.contains(rawX, rawY))
+        val isOverDock = ::dockController.isInitialized && dockController.isDockVisible() && dockController.contains(rawX, rawY)
+        val droppingOnDock = isHoveringDock || (isOverDock && dockAcceptsDrop())
         if (droppingOnDock) {
             isHoveringDock = false
             setDockDropHighlight(false)
@@ -1699,6 +1718,18 @@ private fun isLowEndDevice(): Boolean {
                 resetDragState()
                 return
             }
+        } else if (isOverDock) {
+            // Отпустили над доком, но док заполнен или не принимает элемент (виджет/папка/дубликат).
+            // Нельзя сбрасывать иконку в сетку под док! Возвращаем на исходное место.
+            setDockDropHighlight(false)
+            isHoveringDock = false
+            if (dockController.items().size >= currentSettings.dockIconCount) {
+                Toast.makeText(this, "В доке нет свободного места", Toast.LENGTH_SHORT).show()
+            }
+            updateHomeScreenApps()
+            refreshDock()
+            resetDragState()
+            return
         }
 
         // Drop widget on delete pill -> suck-in poof animation + pill pulse
@@ -5196,8 +5227,8 @@ private var editModeOpenedAt = 0L
         binding.appsRecyclerView.layoutManager = gridLayoutManager
         binding.appsRecyclerView.itemAnimator = null
         binding.appsRecyclerView.setHasFixedSize(true)
-        binding.appsRecyclerView.setItemViewCacheSize(12)
-        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, 30)
+        binding.appsRecyclerView.setItemViewCacheSize(20)
+        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, 40)
         (binding.appsRecyclerView.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
 
@@ -5692,6 +5723,9 @@ private var editModeOpenedAt = 0L
     }
 
     private fun resetDragState() {
+        binding.dragOverlayContainer.visibility = View.GONE
+        binding.floatingDragView.visibility = View.GONE
+        binding.floatingWidgetDragView.visibility = View.GONE
         dragSourceView?.scaleX = 1.0f
         dragSourceView?.scaleY = 1.0f
         dragSourceView?.alpha = 1.0f

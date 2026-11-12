@@ -41,10 +41,49 @@ class AppsAdapter(
         private set
 
     /** Количество колонок сетки для точного расчёта ширины ячеек и подбора размера иконки. */
+    private var cachedIconSize: Int = 0
+    private var cachedLabelSp: Float = 11.5f
+    private var cachedShapeModel: ShapeAppearanceModel = getShapeModel(IconShape.SQUIRCLE)
+
+    private fun recomputeLayoutMetrics(context: android.content.Context) {
+        val density = context.resources.displayMetrics.density
+        cachedShapeModel = getShapeModel(iconShape)
+
+        var finalIconSize: Int
+        if (itemHeight > 0) {
+            val reservedForLabel = if (showLabels) (18 * density).toInt() else (4 * density).toInt()
+            val availableHeight = (itemHeight - reservedForLabel).coerceAtLeast((28 * density).toInt())
+            val baseSize = availableHeight.coerceAtMost((56 * density).toInt())
+            finalIconSize = (baseSize * iconScale).toInt().coerceIn(
+                (28 * density).toInt(),
+                availableHeight.coerceAtLeast((32 * density).toInt())
+            )
+        } else {
+            finalIconSize = (56 * density * iconScale).toInt().coerceIn((36 * density).toInt(), (72 * density).toInt())
+        }
+
+        val columns = if (spanCount > 0) spanCount else 4
+        if (columns > 0) {
+            val dm = context.resources.displayMetrics
+            val totalW = dm.widthPixels - (24 * density).toInt()
+            val cellW = totalW / columns
+            val maxByWidth = (cellW - 6 * density).toInt().coerceIn((20 * density).toInt(), finalIconSize)
+            if (maxByWidth < finalIconSize) finalIconSize = maxByWidth
+        }
+        cachedIconSize = finalIconSize
+
+        cachedLabelSp = when {
+            columns >= 8 -> 9.5f
+            columns >= 6 || (itemHeight > 0 && itemHeight < 72 * density) -> 10.5f
+            else -> 11.5f
+        }
+    }
+
     var spanCount: Int = 4
         set(value) {
             if (field != value && value > 0) {
                 field = value
+                cachedIconSize = 0
                 notifyDataSetChanged()
             }
         }
@@ -127,6 +166,7 @@ class AppsAdapter(
         set(value) {
             if (field != value) {
                 field = value
+                cachedIconSize = 0
                 notifyItemRangeChanged(0, items.size)
             }
         }
@@ -233,6 +273,7 @@ class AppsAdapter(
         this.showLabels = labels
         this.iconScale = scale
         this.smoothAnimations = smoothAnimations
+        cachedIconSize = 0
         notifyItemRangeChanged(0, itemCount, PAYLOAD_CONFIG)
     }
 
@@ -319,6 +360,19 @@ class AppsAdapter(
                 parent,
                 false
             )
+            if (cachedIconSize <= 0) {
+                recomputeLayoutMetrics(parent.context)
+            }
+            if (cachedIconSize > 0) {
+                val lp = binding.iconContainer.layoutParams
+                if (lp != null && (lp.width != cachedIconSize || lp.height != cachedIconSize)) {
+                    lp.width = cachedIconSize
+                    lp.height = cachedIconSize
+                    binding.iconContainer.layoutParams = lp
+                }
+            }
+            binding.appLabel.textSize = cachedLabelSp
+            binding.appIcon.shapeAppearanceModel = cachedShapeModel
             AppViewHolder(binding)
         }
     }
@@ -589,48 +643,13 @@ class AppsAdapter(
             // слушатель из init читает элемент отсюда
             currentItem = item
 
-            // Динамический адаптивный размер иконки под высоту ячейки сетки, чтобы подписи ВСЕГДА помещались
-            var finalIconSize: Int
             if (itemHeight > 0) {
                 applyCellHeight(itemHeight)
-                val reservedForLabel = if (showLabels) (18 * density).toInt() else (4 * density).toInt()
-                val availableHeight = (itemHeight - reservedForLabel).coerceAtLeast((28 * density).toInt())
-                val baseSize = availableHeight.coerceAtMost((56 * density).toInt())
-                finalIconSize = (baseSize * iconScale).toInt().coerceIn(
-                    (28 * density).toInt(),
-                    availableHeight.coerceAtLeast((32 * density).toInt())
-                )
-            } else {
-                finalIconSize = (56 * density * iconScale).toInt().coerceIn((36 * density).toInt(), (72 * density).toInt())
             }
-
-            // Ограничение по ширине колонки: раньше размер считался только от
-            // высоты строки, и при плотной сетке (8-10 колонок) иконки 52dp
-            // налезали друг на друга в 36dp-колонках.
-            // Если список ещё не разложен (width == 0 на первом кадре),
-            // считаем от ширины экрана, а не пропускаем ограничение.
-            // Ограничение по ширине колонки: раньше размер считался только от
-            // высоты строки, и при плотной сетке (8-10 колонок) иконки 52dp
-            // налезали друг на друга в 36dp-колонках.
-            // При биндинге binding.root.parent часто null (ещё не добавлен в RecyclerView),
-            // поэтому spanCount передаётся напрямую в адаптер, а fallback берётся из layoutManager.
-            val parentRv = binding.root.parent as? RecyclerView
-            val gridLm = parentRv?.layoutManager as? androidx.recyclerview.widget.GridLayoutManager
-            val columns = if (spanCount > 0) spanCount else (gridLm?.spanCount ?: 4)
-            if (columns > 0) {
-                val totalW = if (parentRv != null && parentRv.width > 0) {
-                    parentRv.width - parentRv.paddingLeft - parentRv.paddingRight
-                } else {
-                    val dm = binding.root.resources.displayMetrics
-                    dm.widthPixels - (parentRv?.paddingLeft ?: 0) - (parentRv?.paddingRight ?: 0)
-                }
-                val cellW = totalW / columns
-                // 6dp отступ от краёв ячейки, чтобы сквирклы соседних колонок не слипались
-                val maxByWidth = (cellW - 6 * density).toInt()
-                    .coerceIn((20 * density).toInt(), finalIconSize)
-                if (maxByWidth < finalIconSize) finalIconSize = maxByWidth
+            if (cachedIconSize <= 0) {
+                recomputeLayoutMetrics(binding.root.context)
             }
-
+            val finalIconSize = cachedIconSize
             val iconLp = binding.iconContainer.layoutParams
             if (iconLp != null && (iconLp.width != finalIconSize || iconLp.height != finalIconSize)) {
                 iconLp.width = finalIconSize
@@ -765,18 +784,16 @@ class AppsAdapter(
             } else {
                 binding.layoutEnlargedFolder.visibility = View.GONE
                 binding.iconContainer.visibility = View.VISIBLE
-                binding.appLabel.visibility = if (showLabels) View.VISIBLE else View.GONE
-                // setText с тем же текстом всё равно проходит layout — проверяем
-                if (binding.appLabel.text.toString() != item.label) binding.appLabel.text = item.label
-                // setTextSize безусловно дёргает requestLayout() на каждой ячейке
-                val labelSp = when {
-                    columns >= 8 -> 9.5f
-                    columns >= 6 || (itemHeight > 0 && itemHeight < 72 * density) -> 10.5f
-                    else -> 11.5f
+                val targetLabelVis = if (showLabels) View.VISIBLE else View.GONE
+                if (binding.appLabel.visibility != targetLabelVis) {
+                    binding.appLabel.visibility = targetLabelVis
+                }
+                if (binding.appLabel.text != item.label) {
+                    binding.appLabel.text = item.label
                 }
                 val currentSp = binding.appLabel.textSize / binding.root.resources.displayMetrics.scaledDensity
-                if (Math.abs(currentSp - labelSp) > 0.1f) {
-                    binding.appLabel.textSize = labelSp
+                if (Math.abs(currentSp - cachedLabelSp) > 0.1f) {
+                    binding.appLabel.textSize = cachedLabelSp
                 }
 
                 if (item.isFolder) {
@@ -808,13 +825,12 @@ class AppsAdapter(
                     // Обычное приложение
                     binding.layoutFolderPreview.visibility = View.GONE
                     binding.appIcon.visibility = View.VISIBLE
-                    binding.appIcon.setImageDrawable(item.icon)
+                    if (binding.appIcon.drawable !== item.icon) {
+                        binding.appIcon.setImageDrawable(item.icon)
+                    }
 
-                    // Динамическое аппаратное применение формы иконки (Сквиркл Xiaomi).
-                    // Сеттер пересобирает маску даже при той же модели — проверяем.
-                    val shapeModel = getShapeModel(iconShape)
-                    if (binding.appIcon.shapeAppearanceModel !== shapeModel) {
-                        binding.appIcon.shapeAppearanceModel = shapeModel
+                    if (binding.appIcon.shapeAppearanceModel !== cachedShapeModel) {
+                        binding.appIcon.shapeAppearanceModel = cachedShapeModel
                     }
 
                     // Масштаб иконки внутри контейнера нормализован
@@ -858,19 +874,8 @@ class AppsAdapter(
                 if (binding.notificationBadge.text.toString() != badgeText) {
                     binding.notificationBadge.text = badgeText
                 }
-                if (smoothAnimations && wasGone) {
-                    binding.notificationBadge.scaleX = 0f
-                    binding.notificationBadge.scaleY = 0f
-                    binding.notificationBadge.animate()
-                        .scaleX(1.0f)
-                        .scaleY(1.0f)
-                        .setDuration(180)
-                        .setInterpolator(android.view.animation.OvershootInterpolator(1.5f))
-                        .start()
-                } else {
-                    binding.notificationBadge.scaleX = 1.0f
-                    binding.notificationBadge.scaleY = 1.0f
-                }
+                binding.notificationBadge.scaleX = 1.0f
+                binding.notificationBadge.scaleY = 1.0f
             } else {
                 binding.notificationBadge.visibility = View.GONE
             }
