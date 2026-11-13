@@ -18,6 +18,7 @@ import com.naua_morphix_launcher.app.model.LauncherSettings
 import com.naua_morphix_launcher.app.util.PreferencesManager
 import com.naua_morphix_launcher.app.databinding.DialogSettingsShapeBinding
 import com.naua_morphix_launcher.app.model.IconShape
+import com.naua_morphix_launcher.app.util.SystemSettingsNavigator
 
 object SettingsSubDialogs {
 
@@ -153,6 +154,19 @@ object SettingsSubDialogs {
         updateStatuses()
 
         binding.btnDeviceAdmin.setOnClickListener {
+            val deviceAdminComponent = ComponentName(
+                context,
+                com.naua_morphix_launcher.app.receiver.MorphixDeviceAdminReceiver::class.java
+            )
+            if (SystemSettingsNavigator.openDeviceAdmin(
+                    context,
+                    deviceAdminComponent,
+                    "Permission is required for tap-to-lock"
+                )
+            ) {
+                dialog.dismiss()
+                return@setOnClickListener
+            }
             try {
                 val compName = ComponentName(
                     context,
@@ -174,6 +188,10 @@ object SettingsSubDialogs {
         }
 
         binding.btnAccessibility.setOnClickListener {
+            if (SystemSettingsNavigator.openAccessibility(context)) {
+                dialog.dismiss()
+                return@setOnClickListener
+            }
             try {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 dialog.dismiss()
@@ -203,6 +221,10 @@ object SettingsSubDialogs {
         }
 
         binding.btnSystemSecuritySettings.setOnClickListener {
+            if (SystemSettingsNavigator.openSecurity(context)) {
+                dialog.dismiss()
+                return@setOnClickListener
+            }
             try {
                 context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
                 dialog.dismiss()

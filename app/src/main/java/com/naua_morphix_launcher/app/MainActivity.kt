@@ -82,6 +82,7 @@ import com.naua_morphix_launcher.app.ui.SettingsDialog
 import com.naua_morphix_launcher.app.views.LiquidGlassView
 import com.naua_morphix_launcher.app.util.AppLoader
 import com.naua_morphix_launcher.app.util.PreferencesManager
+import com.naua_morphix_launcher.app.util.SystemSettingsNavigator
 
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -677,6 +678,8 @@ class MainActivity : AppCompatActivity() {
             setupAppDrawer()
         }
         drawerAppsAdapter.spanCount = columns
+        binding.appsRecyclerView.setItemViewCacheSize((columns * 4).coerceAtLeast(20))
+        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, (columns * 5).coerceAtLeast(32))
 
         drawerAppsAdapter.updateConfig(
             shape = currentSettings.iconShape,
@@ -3305,6 +3308,7 @@ private fun isLowEndDevice(): Boolean {
 
         menuBinding.btnMenuWallpaper.setOnClickListener {
             dialog.dismiss()
+            if (SystemSettingsNavigator.openWallpaper(this)) return@setOnClickListener
             try {
                 startActivity(Intent(Intent.ACTION_SET_WALLPAPER))
             } catch (e: Exception) {
@@ -3412,6 +3416,7 @@ private fun isLowEndDevice(): Boolean {
         }
 
         binding.btnEditWallpaper.setOnClickListener {
+            if (SystemSettingsNavigator.openWallpaper(this)) return@setOnClickListener
             try {
                 startActivity(Intent(Intent.ACTION_SET_WALLPAPER))
             } catch (e: Exception) {
@@ -5227,8 +5232,9 @@ private var editModeOpenedAt = 0L
         binding.appsRecyclerView.layoutManager = gridLayoutManager
         binding.appsRecyclerView.itemAnimator = null
         binding.appsRecyclerView.setHasFixedSize(true)
-        binding.appsRecyclerView.setItemViewCacheSize(20)
-        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, 40)
+        binding.appsRecyclerView.isNestedScrollingEnabled = false
+        binding.appsRecyclerView.setItemViewCacheSize((columns * 4).coerceAtLeast(20))
+        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, (columns * 5).coerceAtLeast(32))
         (binding.appsRecyclerView.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
 
@@ -5271,6 +5277,7 @@ private var editModeOpenedAt = 0L
     }
 
     private fun openAppInfoSmoothly(item: AppItem) {
+        if (SystemSettingsNavigator.openAppDetails(this, item.packageName)) return
         try {
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                 data = Uri.fromParts("package", item.packageName, null)

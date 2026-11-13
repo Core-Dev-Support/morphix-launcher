@@ -45,6 +45,12 @@ class AppsAdapter(
     private var cachedLabelSp: Float = 11.5f
     private var cachedShapeModel: ShapeAppearanceModel = getShapeModel(IconShape.SQUIRCLE)
 
+    init {
+        // Keep bound app cells while the fixed launcher list is scrolled or a
+        // badge changes; this avoids unnecessary view rebinds and allocations.
+        setHasStableIds(true)
+    }
+
     private fun recomputeLayoutMetrics(context: android.content.Context) {
         val density = context.resources.displayMetrics.density
         cachedShapeModel = getShapeModel(iconShape)
@@ -200,6 +206,11 @@ class AppsAdapter(
     fun getItem(index: Int): AppItem? {
         if (index in items.indices) return items[index]
         return null
+    }
+
+    override fun getItemId(position: Int): Long {
+        val item = items.getOrNull(position) ?: return RecyclerView.NO_ID
+        return if (item.isEmpty) Long.MIN_VALUE + position else identityOf(item).hashCode().toLong()
     }
 
 
