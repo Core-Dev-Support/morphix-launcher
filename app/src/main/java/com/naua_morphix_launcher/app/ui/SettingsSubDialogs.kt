@@ -84,9 +84,27 @@ object SettingsSubDialogs {
 
         updateStatus()
 
+        dialog.window?.decorView?.viewTreeObserver?.addOnWindowFocusChangeListener { hasFocus ->
+            if (hasFocus) updateStatus()
+        }
+
         binding.btnDefaultLauncher.setOnClickListener {
             openDefaultLauncherChooser(context)
-            dialog.dismiss()
+            binding.root.postDelayed({ updateStatus() }, 600)
+        }
+
+        binding.btnDefaultAppsFallback.setOnClickListener {
+            SystemSettingsNavigator.open(
+                context,
+                Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
+                Intent(Settings.ACTION_APPLICATION_SETTINGS),
+                Intent(Settings.ACTION_SETTINGS)
+            )
+            Toast.makeText(
+                context,
+                "Нажмите ⋮ (три точки) вверху справа → Приложения по умолчанию → Рабочий стол",
+                Toast.LENGTH_LONG
+            ).show()
         }
 
         dialog.show()
@@ -153,48 +171,50 @@ object SettingsSubDialogs {
 
         updateStatuses()
 
+        dialog.window?.decorView?.viewTreeObserver?.addOnWindowFocusChangeListener { hasFocus ->
+            if (hasFocus) updateStatuses()
+        }
+
         binding.btnDeviceAdmin.setOnClickListener {
             val deviceAdminComponent = ComponentName(
                 context,
                 com.naua_morphix_launcher.app.receiver.MorphixDeviceAdminReceiver::class.java
             )
-            if (SystemSettingsNavigator.openDeviceAdmin(
-                    context,
-                    deviceAdminComponent,
-                    "Permission is required for tap-to-lock"
-                )
-            ) {
-                dialog.dismiss()
+            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            if (dpm.isAdminActive(deviceAdminComponent)) {
+                Toast.makeText(context, "Разрешение уже выдано", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            try {
-                val compName = ComponentName(
+
+            val opened = SystemSettingsNavigator.openDeviceAdmin(
+                context,
+                deviceAdminComponent,
+                "Разрешение требуется для двойного тапа по экрану"
+            )
+            if (opened && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Toast.makeText(
                     context,
-                    com.naua_morphix_launcher.app.receiver.MorphixDeviceAdminReceiver::class.java
-                )
-                val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
-                intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, compName)
-                intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Разрешение требуется для двойного тапа по экрану")
-                if (intent.resolveActivity(context.packageManager) != null) {
-                    context.startActivity(intent)
-                    dialog.dismiss()
-                } else {
-                    Toast.makeText(context, "Откройте Настройки → Безопасность → Администраторы устройства", Toast.LENGTH_LONG).show()
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                Toast.makeText(context, "Откройте Настройки → Безопасность → Администраторы устройства", Toast.LENGTH_LONG).show()
+                    "На Xiaomi / HyperOS: если окно сразу закрылось, нажмите «Ограниченные настройки» ниже",
+                    Toast.LENGTH_LONG
+                ).show()
             }
+        }
+
+        binding.btnAppDetailsRestrictions.setOnClickListener {
+            SystemSettingsNavigator.openAppDetails(context, context.packageName)
+            Toast.makeText(
+                context,
+                "В открывшемся окне нажмите ⋮ (три точки) вверху справа → «Разрешить доступ к ограниченным настройкам»",
+                Toast.LENGTH_LONG
+            ).show()
         }
 
         binding.btnAccessibility.setOnClickListener {
             if (SystemSettingsNavigator.openAccessibility(context)) {
-                dialog.dismiss()
                 return@setOnClickListener
             }
             try {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                dialog.dismiss()
             } catch (e: Exception) {
                 e.printStackTrace()
             }

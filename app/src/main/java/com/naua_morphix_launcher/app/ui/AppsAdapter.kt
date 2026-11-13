@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.shape.RelativeCornerSize
 import com.google.android.material.shape.ShapeAppearanceModel
 import com.naua_morphix_launcher.app.databinding.ItemAppGridBinding
+import com.naua_morphix_launcher.app.databinding.ItemDrawerAppBinding
 import com.naua_morphix_launcher.app.databinding.ItemWidgetCellBinding
 import com.naua_morphix_launcher.app.model.AppItem
 import com.naua_morphix_launcher.app.model.IconShape
@@ -29,7 +30,8 @@ class AppsAdapter(
     private val onEmptyCellLongClick: (() -> Unit)? = null,
     private val onGetWidgetHostView: ((widgetId: Int, item: AppItem) -> View?)? = null,
     private val onAppClickWithView: ((AppItem, View) -> Unit)? = null,
-    private val onSelectToggle: ((AppItem) -> Unit)? = null
+    private val onSelectToggle: ((AppItem) -> Unit)? = null,
+    private val isDrawer: Boolean = false
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private val items = ArrayList<AppItem>()
@@ -46,9 +48,11 @@ class AppsAdapter(
     private var cachedShapeModel: ShapeAppearanceModel = getShapeModel(IconShape.SQUIRCLE)
 
     init {
-        // Keep bound app cells while the fixed launcher list is scrolled or a
-        // badge changes; this avoids unnecessary view rebinds and allocations.
-        setHasStableIds(true)
+        // На рабочих столах с фиксированной сеткой stable IDs удерживают ячейки,
+        // а в меню приложений скролл должен свободно переиспользовать пул холдеров без коллизий.
+        if (!isDrawer) {
+            setHasStableIds(true)
+        }
     }
 
     private fun recomputeLayoutMetrics(context: android.content.Context) {
@@ -209,6 +213,7 @@ class AppsAdapter(
     }
 
     override fun getItemId(position: Int): Long {
+        if (isDrawer) return RecyclerView.NO_ID
         val item = items.getOrNull(position) ?: return RecyclerView.NO_ID
         return if (item.isEmpty) Long.MIN_VALUE + position else identityOf(item).hashCode().toLong()
     }
@@ -365,6 +370,26 @@ class AppsAdapter(
                 false
             )
             WidgetViewHolder(binding)
+        } else if (isDrawer) {
+            val binding = ItemDrawerAppBinding.inflate(
+                LayoutInflater.from(parent.context),
+                parent,
+                false
+            )
+            if (cachedIconSize <= 0) {
+                recomputeLayoutMetrics(parent.context)
+            }
+            if (cachedIconSize > 0) {
+                val lp = binding.iconContainer.layoutParams
+                if (lp != null && (lp.width != cachedIconSize || lp.height != cachedIconSize)) {
+                    lp.width = cachedIconSize
+                    lp.height = cachedIconSize
+                    binding.iconContainer.layoutParams = lp
+                }
+            }
+            binding.appLabel.textSize = cachedLabelSp
+            binding.appIcon.shapeAppearanceModel = cachedShapeModel
+            DrawerAppViewHolder(binding)
         } else {
             val binding = ItemAppGridBinding.inflate(
                 LayoutInflater.from(parent.context),
@@ -390,6 +415,14 @@ class AppsAdapter(
 
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int, payloads: MutableList<Any>) {
         val item = items.getOrNull(position) ?: return
+        if (holder is DrawerAppViewHolder) {
+            if (payloads.contains(PAYLOAD_BADGE)) {
+                holder.applyBadge(item)
+            } else {
+                holder.bind(item)
+            }
+            return
+        }
         var needsFullBind = payloads.isEmpty()
 
         // RecyclerView объединяет все payload'ы позиции в ОДИН список.
@@ -431,6 +464,7 @@ class AppsAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val item = items.getOrNull(position) ?: return
         when (holder) {
+            is DrawerAppViewHolder -> holder.bind(item)
             is WidgetViewHolder -> holder.bind(item)
             is AppViewHolder -> holder.bind(item)
         }
@@ -445,8 +479,139 @@ class AppsAdapter(
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
         super.onViewRecycled(holder)
         when (holder) {
+            is DrawerAppViewHolder -> holder.cancelPendingCallbacks()
             is AppViewHolder -> holder.cancelPendingCallbacks()
             is WidgetViewHolder -> holder.detach()
+        }
+    }
+
+    inner class DrawerAppViewHolder(private val binding: ItemDrawerAppBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+
+        private var pendingLongPress: Runnable? = null
+        private var downRawX = 0f
+        private var downRawY = 0f
+        private var currentItem: AppItem = AppItem.empty()
+        private var downItem: AppItem = AppItem.empty()
+
+        init {
+            binding.root.setOnTouchListener { v, event -> handleRootTouch(v, event) }
+            binding.root.setOnClickListener(null)
+            binding.root.setOnLongClickListener(null)
+        }
+
+        private fun handleRootTouch(v: View, event: android.view.MotionEvent): Boolean {
+            val density = v.resources.displayMetrics.density
+            val item = currentItem
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downItem = item
+                    downRawX = event.rawX
+                    downRawY = event.rawY
+                    cancelPendingCallbacks()
+
+                    val pressedItem = downItem
+                    pendingLongPress = Runnable {
+                        markLongPressConsumed()
+                        v.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                        onAppLongClick?.invoke(pressedItem, binding.root, this)
+                    }
+                    TOUCH_HANDLER.postDelayed(pendingLongPress!!, 400)
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val diffX = Math.abs(event.rawX - downRawX)
+                    val diffY = Math.abs(event.rawY - downRawY)
+                    if (diffX > 8 * density || diffY > 8 * density) {
+                        cancelPendingCallbacks()
+                    }
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    cancelPendingCallbacks()
+                    if (!consumeTapAfterLongPress()) {
+                        val diffX = Math.abs(event.rawX - downRawX)
+                        val diffY = Math.abs(event.rawY - downRawY)
+                        if (diffX <= 10 * density && diffY <= 10 * density) {
+                            v.performClick()
+                            onAppClickWithView?.invoke(downItem, v) ?: onAppClick(downItem)
+                        }
+                    }
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    cancelPendingCallbacks()
+                }
+            }
+            return true
+        }
+
+        fun cancelPendingCallbacks() {
+            pendingLongPress?.let { TOUCH_HANDLER.removeCallbacks(it) }
+            pendingLongPress = null
+        }
+
+        fun applyBadge(item: AppItem) {
+            renderBadge(item)
+        }
+
+        private fun applyCellHeight(height: Int) {
+            if (height <= 0) return
+            val lp = binding.root.layoutParams ?: return
+            if (lp.height == height) return
+            lp.height = height
+            binding.root.layoutParams = lp
+        }
+
+        fun bind(item: AppItem) {
+            currentItem = item
+            cancelPendingCallbacks()
+
+            if (itemHeight > 0) {
+                applyCellHeight(itemHeight)
+            }
+            if (cachedIconSize <= 0) {
+                recomputeLayoutMetrics(binding.root.context)
+            }
+            val finalIconSize = cachedIconSize
+            val iconLp = binding.iconContainer.layoutParams
+            if (iconLp != null && (iconLp.width != finalIconSize || iconLp.height != finalIconSize)) {
+                iconLp.width = finalIconSize
+                iconLp.height = finalIconSize
+                binding.iconContainer.layoutParams = iconLp
+            }
+
+            val targetLabelVis = if (showLabels) View.VISIBLE else View.GONE
+            if (binding.appLabel.visibility != targetLabelVis) {
+                binding.appLabel.visibility = targetLabelVis
+            }
+            if (binding.appLabel.text != item.label) {
+                binding.appLabel.text = item.label
+            }
+            val currentSp = binding.appLabel.textSize / binding.root.resources.displayMetrics.scaledDensity
+            if (Math.abs(currentSp - cachedLabelSp) > 0.1f) {
+                binding.appLabel.textSize = cachedLabelSp
+            }
+
+            if (binding.appIcon.drawable !== item.icon) {
+                binding.appIcon.setImageDrawable(item.icon)
+            }
+            if (binding.appIcon.shapeAppearanceModel !== cachedShapeModel) {
+                binding.appIcon.shapeAppearanceModel = cachedShapeModel
+            }
+
+            binding.cloneBadge.visibility = if (item.isSecondSpace) View.VISIBLE else View.GONE
+            renderBadge(item)
+
+            downRawX = 0f
+            downRawY = 0f
+        }
+
+        private fun renderBadge(item: AppItem) {
+            val unreadCount = badgeCounts[item.packageName] ?: 0
+            if (unreadCount > 0) {
+                binding.notificationBadge.visibility = View.VISIBLE
+                binding.notificationBadge.text = if (unreadCount > 99) "99+" else unreadCount.toString()
+            } else {
+                binding.notificationBadge.visibility = View.GONE
+            }
         }
     }
 

@@ -678,8 +678,8 @@ class MainActivity : AppCompatActivity() {
             setupAppDrawer()
         }
         drawerAppsAdapter.spanCount = columns
-        binding.appsRecyclerView.setItemViewCacheSize((columns * 4).coerceAtLeast(20))
-        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, (columns * 5).coerceAtLeast(32))
+        binding.appsRecyclerView.setItemViewCacheSize(columns)
+        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(AppsAdapter.VIEW_TYPE_APP, 24)
 
         drawerAppsAdapter.updateConfig(
             shape = currentSettings.iconShape,
@@ -1117,10 +1117,10 @@ private fun isLowEndDevice(): Boolean {
         // Свайп вниз в меню приложений для его закрытия при нахождении в самом начале списка
         if (binding.glassAppDrawer.visibility == View.VISIBLE) {
             val density = resources.displayMetrics.density
-            val canScrollUp = binding.appsRecyclerView.canScrollVertically(-1)
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    drawerSwipeTracking = !canScrollUp
+                    // Отслеживаем свайп вниз для закрытия шторки ТОЛЬКО если список уже в самом верху
+                    drawerSwipeTracking = !binding.appsRecyclerView.canScrollVertically(-1)
                     drawerSwipeStartX = ev.rawX
                     drawerSwipeStartY = ev.rawY
                     drawerSwipeStartTime = SystemClock.uptimeMillis()
@@ -1129,21 +1129,18 @@ private fun isLowEndDevice(): Boolean {
                     if (drawerSwipeTracking) {
                         val dy = ev.rawY - drawerSwipeStartY
                         val dx = ev.rawX - drawerSwipeStartX
-                        if (dy > 45 * density && dy > Math.abs(dx) * 1.25f) {
+                        if (dy < -8 * density) {
+                            // Пользователь листает список вниз (палец движется вверх) —
+                            // окончательно выключаем отслеживание шторки, не мешая скроллу RecyclerView!
+                            drawerSwipeTracking = false
+                        } else if (dy > 45 * density && dy > Math.abs(dx) * 1.25f) {
                             drawerSwipeTracking = false
                             val cancel = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
                             super.dispatchTouchEvent(cancel)
                             cancel.recycle()
                             closeAppDrawer()
                             return true
-                        } else if (dy < -10 * density) {
-                            drawerSwipeTracking = false
                         }
-                    } else if (!binding.appsRecyclerView.canScrollVertically(-1)) {
-                        drawerSwipeTracking = true
-                        drawerSwipeStartX = ev.rawX
-                        drawerSwipeStartY = ev.rawY
-                        drawerSwipeStartTime = SystemClock.uptimeMillis()
                     }
                 }
                 MotionEvent.ACTION_UP -> {
@@ -4465,51 +4462,20 @@ Toast.makeText(this, "Выполнено", Toast.LENGTH_SHORT).show()
     companion object {
         /** Открывает экран выбора лаунчера по умолчанию с поддержкой Xiaomi / HyperOS / MIUI и AOSP. */
         fun openDefaultLauncherSettings(context: Context) {
-            val intents = mutableListOf<Intent>()
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                try {
-                    val roleManager = context.getSystemService(Context.ROLE_SERVICE) as? android.app.role.RoleManager
-                    if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_HOME) == true &&
-                        !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
-                    ) {
-                        intents.add(roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_HOME))
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
+            val opened = SystemSettingsNavigator.openDefaultHome(context)
+            if (opened) {
+                Toast.makeText(
+                    context,
+                    "Выберите Morphix Launcher в качестве основного экрана",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                Toast.makeText(
+                    context,
+                    "Настройки → Приложения → Все приложения → ⋮ → По умолчанию → Рабочий стол",
+                    Toast.LENGTH_LONG
+                ).show()
             }
-
-            // Фирменные интенты Xiaomi / HyperOS / MIUI
-            intents.add(Intent("miui.intent.action.PREFERRED_APP_SETTINGS"))
-            intents.add(Intent().setComponent(ComponentName("com.miui.home", "com.miui.home.launcher.setting.HomeSettingActivity")))
-            intents.add(Intent().setComponent(ComponentName("com.miui.home", "com.miui.home.launcher.setting.DefaultHomeActivity")))
-            intents.add(Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$ManageDefaultAppsSettingsActivity")))
-            intents.add(Intent().setComponent(ComponentName("com.android.settings", "com.android.settings.Settings\$HomeSettingsActivity")))
-
-            // Стандартные AOSP интенты
-            intents.add(Intent(Settings.ACTION_HOME_SETTINGS))
-            intents.add(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
-            intents.add(Intent(Settings.ACTION_APPLICATION_SETTINGS))
-            intents.add(Intent(Settings.ACTION_SETTINGS))
-
-            for (intent in intents) {
-                try {
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    if (intent.resolveActivity(context.packageManager) != null) {
-                        context.startActivity(intent)
-                        return
-                    }
-                } catch (e: Exception) {
-                    // пробуем следующий интент
-                }
-            }
-
-            Toast.makeText(
-                context,
-                "Настройки → Рабочий стол → Рабочий стол по умолчанию (или Настройки → Приложения → Все приложения → ⋮ → По умолчанию)",
-                Toast.LENGTH_LONG
-            ).show()
         }
     }
 
@@ -5227,14 +5193,14 @@ private var editModeOpenedAt = 0L
         val columns = drawerColumnCount()
         val gridLayoutManager = GridLayoutManager(this, columns).apply {
             isItemPrefetchEnabled = true
-            initialPrefetchItemCount = columns * 2
+            initialPrefetchItemCount = columns
         }
         binding.appsRecyclerView.layoutManager = gridLayoutManager
         binding.appsRecyclerView.itemAnimator = null
         binding.appsRecyclerView.setHasFixedSize(true)
         binding.appsRecyclerView.isNestedScrollingEnabled = false
-        binding.appsRecyclerView.setItemViewCacheSize((columns * 4).coerceAtLeast(20))
-        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(0, (columns * 5).coerceAtLeast(32))
+        binding.appsRecyclerView.setItemViewCacheSize(columns)
+        binding.appsRecyclerView.recycledViewPool.setMaxRecycledViews(AppsAdapter.VIEW_TYPE_APP, 24)
         (binding.appsRecyclerView.itemAnimator as? androidx.recyclerview.widget.SimpleItemAnimator)
             ?.supportsChangeAnimations = false
 
@@ -5247,7 +5213,8 @@ private var editModeOpenedAt = 0L
             },
             onAppClickWithView = { item, view ->
                 AppLoader.launchApp(this, item, view, smoothAnimations = currentSettings.smoothAnimations)
-            }
+            },
+            isDrawer = true
         )
         drawerAppsAdapter.spanCount = drawerColumnCount()
         drawerAppsAdapter.updateConfig(
@@ -5257,6 +5224,20 @@ private var editModeOpenedAt = 0L
             smoothAnimations = currentSettings.smoothAnimations
         )
         binding.appsRecyclerView.adapter = drawerAppsAdapter
+
+        // Предварительное наполнение пула переиспользования (pre-warm):
+        // исключает инфляцию XML во время пользовательского скролла сетки!
+        binding.appsRecyclerView.post {
+            try {
+                val pool = binding.appsRecyclerView.recycledViewPool
+                for (i in 0 until 12) {
+                    val vh = drawerAppsAdapter.createViewHolder(binding.appsRecyclerView, AppsAdapter.VIEW_TYPE_APP)
+                    pool.putRecycledView(vh)
+                }
+            } catch (e: Exception) {
+                // fall through
+            }
+        }
     }
 
     private fun setupSpaceSelector() {
